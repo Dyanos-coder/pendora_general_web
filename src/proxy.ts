@@ -6,9 +6,9 @@ import { SESSION_COOKIE, verifySession } from '@/lib/session-token'
 // requireAccount() dans chaque page et action — ce filtre ne fait qu'éviter d'afficher une page
 // protégée à un visiteur non connecté.
 
-// Pages publiques : connexion, vérification des reçus (QR code), retours et notifications de
-// paiement, appels de l'application des hôpitaux (authentifiés par leur propre secret).
-const PUBLIC_PREFIXES = ['/login', '/register', '/r/', '/paiement', '/api/public/']
+// Pages publiques : connexion, vérification des reçus (QR code), page de retour après paiement
+// MoneyFusion (/callback), notifications de paiement, appels de l'application des hôpitaux (authentifiés par leur propre secret).
+const PUBLIC_PREFIXES = ['/login', '/register', '/r/', '/callback', '/api/public/']
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl

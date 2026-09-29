@@ -18,7 +18,6 @@ import {
   Users,
   Wallet
 } from 'lucide-react'
-import { getCurrentAccount } from '@/lib/auth'
 import { OFFERS, type Offer } from '@/lib/offers'
 import { ContactForm } from './ContactForm'
 
@@ -90,9 +89,7 @@ function price(amount: number): string {
   return amount.toLocaleString('fr-FR')
 }
 
-export default async function LandingPage() {
-  const account = await getCurrentAccount()
-
+export default function LandingPage() {
   return (
     <div className="bg-white text-gray-900">
       {/* En-tête */}
@@ -120,12 +117,6 @@ export default async function LandingPage() {
             </a>
           </nav>
           <div className="flex items-center gap-2">
-            <Link
-              href={account ? '/dashboard' : '/login'}
-              className="hidden rounded-lg px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 sm:inline-flex"
-            >
-              {account ? 'Console' : 'Espace équipe'}
-            </Link>
             <a
               href="#contact"
               className="inline-flex items-center gap-1.5 rounded-lg bg-accent-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-accent-700"
@@ -438,9 +429,6 @@ export default async function LandingPage() {
             <a href="#contact" className="hover:text-gray-900">
               Contact
             </a>
-            <Link href="/login" className="hover:text-gray-900">
-              Espace équipe
-            </Link>
           </div>
         </div>
       </footer>
