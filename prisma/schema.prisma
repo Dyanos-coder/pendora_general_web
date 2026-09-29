@@ -1,0 +1,94 @@
+// Base de données du site général Pandora (Plan-Site-Pandora.md §3) — distincte des bases des
+// hôpitaux, auxquelles le site se connecte avec les accès enregistrés dans `Hospital`.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+enum AccountRole {
+  ADMIN
+  PROSPECTEUR
+}
+
+model Account {
+  id           String      @id @default(uuid())
+  email        String      @unique
+  name         String
+  passwordHash String
+  role         AccountRole
+  isActive     Boolean     @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime    @default(now())
+
+  @@map("account")
+}
+
+// Version mobile : non souhaitée / souhaitée (à installer) / installée — renseignée par les
+// prospecteurs (§9-G).
+enum MobileStatus {
+  NON_SOUHAITEE
+  SOUHAITEE
+  INSTALLEE
+}
+
+// Un hôpital client. `id` = nom d'utilisateur de sa base (unique, §3), fixé à la création.
+// Le mot de passe de la base est chiffré (AES-256-GCM, clé CREDENTIALS_KEY du .env).
+model Hospital {
+  id            String       @id
+  name          String
+  dbHost        String
+  dbPort        Int          @default(3306)
+  dbName        String
+  dbUser        String
+  dbPasswordEnc String       @db.Text
+  dbSsl         Boolean      @default(false)
+  mobileStatus  MobileStatus @default(NON_SOUHAITEE)
+  installedAt   DateTime     @default(now())
+  notes         String?      @db.Text
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@map("hospital")
+}
+
+// Journal des actions sur le site (qui a fait quoi).
+model AuditLog {
+  id        String   @id @default(uuid())
+  accountId String?
+  action    String
+  target    String?
+  detail    String?  @db.Text
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("audit_log")
+}
+
+// Demandes de contact / démo envoyées depuis la page d'accueil publique — suivies par l'équipe
+// (admins et prospecteurs) dans la console.
+enum ContactStatus {
+  NOUVELLE
+  TRAITEE
+}
+
+model ContactRequest {
+  id            String        @id @default(uuid())
+  name          String
+  establishment String
+  phone         String
+  email         String?
+  city          String?
+  message       String?       @db.Text
+  status        ContactStatus @default(NOUVELLE)
+  handledById   String?
+  handledAt     DateTime?
+  createdAt     DateTime      @default(now())
+
+  @@index([status, createdAt])
+  @@map("contact_request")
+}
