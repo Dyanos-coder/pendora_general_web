@@ -4,6 +4,7 @@ import type { Hospital } from '@/generated/prisma/client'
 import { decryptSecret } from './crypto'
 import { ALL_MODULE_IDS } from './modules'
 import { verifyText } from './signing'
+import { currentPeriod, livePeriods, normalizePayload, type SubscriptionPeriod } from './subscription-periods'
 
 // Lecture des bases des hôpitaux (§5) avec les accès enregistrés dans `Hospital`. Lecture seule,
 // délais courts (une base lente ou coupée ne bloque jamais l'affichage), résultats gardés en
@@ -33,7 +34,16 @@ export interface HospitalOverview {
   lastMigration: { name: string; appliedAt: string } | null
   lastActivityAt: string | null
   /** Abonnement lu dans la base de l'hôpital : null = jamais activé ; valid = signature Pandora correcte. */
-  subscription: { endDate: string; issuedAt: string; items: string[]; modules: string[]; valid: boolean } | null
+  subscription: {
+    endDate: string
+    issuedAt: string
+    /** Offres et modules de la période en cours (vides si expiré). */
+    items: string[]
+    modules: string[]
+    /** Périodes en cours et à venir (ex. mois d'essai, puis mois payés). */
+    periods: SubscriptionPeriod[]
+    valid: boolean
+  } | null
 }
 
 const CACHE_TTL_MS = 2 * 60 * 1000
@@ -140,12 +150,15 @@ export async function readOverview(hospital: Hospital, options: { force?: boolea
     const subscription = await safe(async () => {
       const rows = (await c.query("SELECT payload, signature FROM subscription WHERE id = 'current'")) as { payload: string; signature: string }[]
       if (!rows[0]) return null
-      const p = JSON.parse(rows[0].payload) as { hospitalId: string; endDate: string; issuedAt: string; items: string[]; modules: string[] }
+      const p = normalizePayload(JSON.parse(rows[0].payload))
+      if (!p) return null
+      const current = currentPeriod(p)
       return {
         endDate: p.endDate,
         issuedAt: p.issuedAt,
-        items: p.items ?? [],
-        modules: p.modules ?? [],
+        items: current?.items ?? [],
+        modules: current?.modules ?? [],
+        periods: livePeriods(p),
         valid: verifyText(rows[0].payload, rows[0].signature) && p.hospitalId === hospital.id
       }
     })

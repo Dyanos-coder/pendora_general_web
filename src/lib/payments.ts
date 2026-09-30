@@ -2,14 +2,8 @@ import 'server-only'
 import type { Payment } from '@/generated/prisma/client'
 import { prisma } from './db'
 import { getMoneyFusionStatus } from './moneyfusion'
-import {
-  addMonthsTo28,
-  freshEndDate,
-  isActive,
-  readHospitalSubscription,
-  writeHospitalSubscription,
-  type SubscriptionPayload
-} from './subscription'
+import { readHospitalSubscription, writeHospitalSubscription, type SubscriptionPayload } from './subscription'
+import { planSubscription } from './subscription-periods'
 
 // Cycle de vie d'un paiement d'abonnement : EN_ATTENTE → PAYE (confirmé par MoneyFusion ou saisi
 // par un admin) → APPLIQUE (abonnement signé écrit dans la base de l'hôpital). Chaque étape est
@@ -33,21 +27,15 @@ export async function applyPayment(paymentId: string): Promise<Payment> {
   try {
     const current = await readHospitalSubscription(payment.hospital)
     const currentPayload = current?.valid ? current.payload : null
-    const active = isActive(currentPayload)
-    const newEndDate =
-      payment.months === 0
-        ? active
-          ? currentPayload!.endDate
-          : (payment.newEndDate ?? freshEndDate(1))
-        : active
-          ? addMonthsTo28(currentPayload!.endDate, payment.months)
-          : freshEndDate(payment.months)
+    // Découpage recalculé sur l'abonnement tel qu'il est au moment d'appliquer (le paiement a pu
+    // attendre) : ce qui est déjà acquis reste acquis, les mois payés s'ajoutent à la suite.
+    const plan = planSubscription(currentPayload, JSON.parse(payment.items) as string[], JSON.parse(payment.modules) as string[], payment.months)
+    const newEndDate = plan.newEndDate
 
     const payload: SubscriptionPayload = {
-      v: 1,
+      v: 2,
       hospitalId: payment.hospitalId,
-      modules: JSON.parse(payment.modules) as string[],
-      items: JSON.parse(payment.items) as string[],
+      periods: plan.periods,
       endDate: newEndDate,
       issuedAt: new Date().toISOString(),
       paymentId: payment.id
@@ -55,7 +43,7 @@ export async function applyPayment(paymentId: string): Promise<Payment> {
     await writeHospitalSubscription(payment.hospital, payload)
     const applied = await prisma.payment.update({
       where: { id: paymentId },
-      data: { newEndDate, previousEndDate: currentPayload?.endDate ?? null, lastError: null }
+      data: { newEndDate, previousEndDate: plan.previousEndDate, lastError: null }
     })
     await appendEvent(paymentId, { type: 'applied', endDate: newEndDate })
     return applied

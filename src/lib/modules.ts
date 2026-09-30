@@ -9,8 +9,7 @@ export const MODULE_GROUPS: { label: string; modules: { id: string; label: strin
       { id: 'appointments', label: 'Rendez-vous' },
       { id: 'consultations', label: 'Consultations' },
       { id: 'hospitalization', label: 'Hospitalisation' },
-      { id: 'emergencies', label: 'Urgences' },
-      { id: 'operating-room', label: 'Bloc opératoire' }
+      { id: 'emergencies', label: 'Urgences' }
     ]
   },
   {
@@ -20,7 +19,8 @@ export const MODULE_GROUPS: { label: string; modules: { id: string; label: strin
       { id: 'imaging', label: 'Imagerie médicale' },
       { id: 'cardiology', label: 'Cardiologie' },
       { id: 'pathology', label: 'Anatomopathologie' },
-      { id: 'endoscopy', label: 'Endoscopie' }
+      { id: 'endoscopy', label: 'Endoscopie' },
+      { id: 'operating-room', label: 'Bloc opératoire' }
     ]
   },
   {

@@ -35,9 +35,19 @@ export async function SubscriptionPanel({ hospital, overview, isAdmin }: { hospi
             <p className="text-xs text-gray-400">Échéance</p>
             <p className="text-lg font-semibold text-gray-900">{formatYmd(sub.endDate)}</p>
           </div>
-          <div className="sm:col-span-2">
-            <p className="text-xs text-gray-400">Offres payées</p>
-            <p className="text-sm text-gray-700">{sub.items.map((k) => labelOf.get(k) ?? k).join(' · ') || '—'}</p>
+          <div className="space-y-2 sm:col-span-2">
+            {sub.periods.length === 0 ? (
+              <p className="text-sm text-gray-400">Aucune période en cours.</p>
+            ) : (
+              sub.periods.map((period, index) => (
+                <div key={period.until}>
+                  <p className="text-xs text-gray-400">
+                    {index === 0 ? 'En cours' : 'Ensuite'}, jusqu&apos;au {formatYmd(period.until)}
+                  </p>
+                  <p className="text-sm text-gray-700">{period.items.map((k) => labelOf.get(k) ?? k).join(' · ') || '—'}</p>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}
@@ -49,7 +59,7 @@ export async function SubscriptionPanel({ hospital, overview, isAdmin }: { hospi
               key={sub ? 'subscribed' : 'none'}
               hospitalId={hospital.id}
               catalog={catalog.filter((i) => i.active && !i.comingSoon).map((i) => ({ key: i.key, offer: i.offer, label: i.label, price: i.price, mandatory: i.mandatory }))}
-              currentItems={sub?.items ?? []}
+              currentItems={sub?.periods.at(-1)?.items ?? []}
             />
           </div>
           {payments.length > 0 && (

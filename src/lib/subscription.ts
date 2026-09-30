@@ -6,23 +6,20 @@ import { decryptSecret, encryptSecret } from './crypto'
 import { accessOf, openConnection } from './hospital-db'
 import { FREE_MODULES, OFFERS } from './offers'
 import { signText, verifyText } from './signing'
+import {
+  normalizePayload,
+  planSubscription,
+  ymd,
+  type SubscriptionPayload,
+  type SubscriptionPeriod
+} from './subscription-periods'
+
+export { addMonthsTo28, freshEndDate, isActive, todayYmd } from './subscription-periods'
+export type { SubscriptionPayload, SubscriptionPeriod } from './subscription-periods'
 
 // Abonnements (Plan-Site-Pandora.md §6) : grille, devis, dates d'échéance (le 28), signature
 // Ed25519 et écriture dans la base de l'hôpital. Le site est le seul à pouvoir signer ; l'application
 // vérifie la signature avec la clé publique qu'elle embarque (§6.4).
-
-export interface SubscriptionPayload {
-  v: 1
-  hospitalId: string
-  /** Modules de l'application débloqués (hors modules gratuits, ajoutés par l'application). */
-  modules: string[]
-  /** Clés de la grille payées (pour proposer le même renouvellement). */
-  items: string[]
-  /** Dernier jour couvert, inclus (AAAA-MM-JJ) — toujours un 28. */
-  endDate: string
-  issuedAt: string
-  paymentId: string | null
-}
 
 export interface HospitalSubscription {
   payload: SubscriptionPayload
@@ -67,41 +64,9 @@ export function itemModules(item: PriceItem): string[] {
 
 // --- Dates (échéance le 28) -----------------------------------------------------------------
 
-function ymd(date: Date): string {
-  return date.toISOString().slice(0, 10)
-}
-
-export function todayYmd(): string {
-  return ymd(new Date())
-}
-
-function the28th(year: number, monthIndex: number): string {
-  return ymd(new Date(Date.UTC(year, monthIndex, 28)))
-}
-
-/** Échéance à N mois d'une échéance existante (un 28 → un 28). */
-export function addMonthsTo28(endDate: string, months: number): string {
-  const [y, m] = endDate.split('-').map(Number)
-  return the28th(y, m - 1 + months)
-}
-
-/** Abonnement repris après expiration : N mois à partir d'aujourd'hui, arrondis au 28 suivant. */
-export function freshEndDate(months: number, from = new Date()): string {
-  const target = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth() + months, from.getUTCDate()))
-  return target.getUTCDate() <= 28 ? the28th(target.getUTCFullYear(), target.getUTCMonth()) : the28th(target.getUTCFullYear(), target.getUTCMonth() + 1)
-}
-
 /** Premier mois inclus à l'installation (§9-B) : échéance le 28 du mois suivant. */
 export function firstMonthEndDate(installedAt: Date): string {
-  return the28th(installedAt.getUTCFullYear(), installedAt.getUTCMonth() + 1)
-}
-
-function daysBetween(fromYmd: string, toYmd: string): number {
-  return Math.round((Date.parse(`${toYmd}T00:00:00Z`) - Date.parse(`${fromYmd}T00:00:00Z`)) / 86400000)
-}
-
-export function isActive(payload: SubscriptionPayload | null | undefined): boolean {
-  return Boolean(payload && payload.endDate >= todayYmd())
+  return ymd(new Date(Date.UTC(installedAt.getUTCFullYear(), installedAt.getUTCMonth() + 1, 28)))
 }
 
 // --- Devis ------------------------------------------------------------------------------------
@@ -115,14 +80,17 @@ export interface Quote {
   total: number
   previousEndDate: string | null
   newEndDate: string
+  /** Découpage de l'abonnement après ce paiement (ce qui est déjà acquis reste acquis). */
+  periods: SubscriptionPeriod[]
 }
 
 export class QuoteError extends Error {}
 
 /**
- * Montant d'un paiement : (somme des prix) × mois, plus — si l'abonnement est en cours et que des
- * éléments sont ajoutés — ces éléments au prorata des jours restants jusqu'à l'échéance actuelle
- * (§9-C). `months = 0` : ajout de modules seul, sans prolonger.
+ * Montant d'un paiement : (somme des prix) × mois, plus — pour les éléments ajoutés aux périodes
+ * déjà couvertes — leur prix au prorata des jours restants (§9-C). Ce qui est déjà acquis (mois
+ * d'essai, mois déjà payés) n'est jamais retiré : la sélection s'applique aux mois achetés.
+ * `months = 0` : ajout de modules seul, sans prolonger.
  */
 export async function computeQuote(itemKeys: string[], months: number, current: SubscriptionPayload | null): Promise<Quote> {
   if (!Number.isInteger(months) || months < 0 || months > 24) throw new QuoteError('Durée invalide (0 à 24 mois).')
@@ -136,29 +104,25 @@ export async function computeQuote(itemKeys: string[], months: number, current: 
   }
   if (chosen.length === 0) throw new QuoteError('Aucun module choisi.')
 
-  const active = isActive(current)
-  const monthly = chosen.reduce((sum, i) => sum + i.price, 0)
-  const currentItems = new Set(active ? current!.items : [])
-  const added = chosen.filter((i) => !currentItems.has(i.key))
-  // Jours restants jusqu'à l'échéance actuelle (au-delà, les éléments ajoutés sont compris dans `months`).
-  const daysLeft = active ? Math.max(0, daysBetween(todayYmd(), current!.endDate) + 1) : 0
-  const prorataRaw = active ? (added.reduce((sum, i) => sum + i.price, 0) * daysLeft) / 30 : 0
-  const prorata = Math.ceil(prorataRaw / 100) * 100
-
-  if (months === 0 && !(active && added.length > 0)) {
+  const modules = [...new Set(chosen.flatMap(itemModules))].sort()
+  const price = new Map(chosen.map((i) => [i.key, i.price]))
+  const plan = planSubscription(current, keys, modules, months, (key) => price.get(key) ?? 0)
+  if (months === 0 && plan.addedItems.length === 0) {
     throw new QuoteError('Choisissez une durée, ou ajoutez des modules à l’abonnement en cours.')
   }
-  const newEndDate = months === 0 ? current!.endDate : active ? addMonthsTo28(current!.endDate, months) : freshEndDate(months)
+  const monthly = chosen.reduce((sum, i) => sum + i.price, 0)
+  const labelOf = new Map(catalog.map((i) => [i.key, i.label]))
 
   return {
     items: chosen.map((i) => ({ key: i.key, label: i.label, price: i.price })),
-    modules: [...new Set(chosen.flatMap(itemModules))].sort(),
+    modules,
     months,
     monthly,
-    prorata: { amount: prorata, days: daysLeft, items: added.map((i) => i.label) },
-    total: monthly * months + prorata,
-    previousEndDate: active ? current!.endDate : null,
-    newEndDate
+    prorata: { amount: plan.prorataAmount, days: plan.prorataDays, items: plan.addedItems.map((k) => labelOf.get(k) ?? k) },
+    total: monthly * months + plan.prorataAmount,
+    previousEndDate: plan.previousEndDate,
+    newEndDate: plan.newEndDate,
+    periods: plan.periods
   }
 }
 
@@ -192,7 +156,8 @@ export async function readHospitalSubscription(hospital: Hospital): Promise<Hosp
       signature: string
     }[]
     if (!rows[0]) return null
-    const payload = JSON.parse(rows[0].payload) as SubscriptionPayload
+    const payload = normalizePayload(JSON.parse(rows[0].payload))
+    if (!payload) return null
     const valid = verifyText(rows[0].payload, rows[0].signature) && payload.hospitalId === hospital.id
     return { payload, valid }
   } catch (error) {
@@ -236,12 +201,12 @@ export async function writeHospitalSubscription(hospital: Hospital, payload: Sub
 /** Premier mois inclus (§9-B) : tous les modules de la grille, jusqu'au 28 du mois suivant. */
 export async function initialSubscription(hospital: Hospital): Promise<SubscriptionPayload> {
   const catalog = (await getPriceItems()).filter((i) => i.active && !i.comingSoon)
+  const endDate = firstMonthEndDate(hospital.installedAt)
   return {
-    v: 1,
+    v: 2,
     hospitalId: hospital.id,
-    modules: [...new Set(catalog.flatMap(itemModules))].sort(),
-    items: catalog.map((i) => i.key),
-    endDate: firstMonthEndDate(hospital.installedAt),
+    periods: [{ until: endDate, items: catalog.map((i) => i.key), modules: [...new Set(catalog.flatMap(itemModules))].sort() }],
+    endDate,
     issuedAt: new Date().toISOString(),
     paymentId: null
   }
