@@ -84,6 +84,7 @@ export async function createHospital(_prev: FormState, formData: FormData): Prom
     }
   })
   await logAudit(admin.id, 'hospital.create', id, name)
+  forgetOverview(id)
   revalidatePath('/hospitals')
   redirect(`/hospitals/${encodeURIComponent(id)}`)
 }

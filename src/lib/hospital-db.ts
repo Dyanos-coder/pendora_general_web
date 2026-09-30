@@ -3,6 +3,7 @@ import mariadb, { type Connection } from 'mariadb'
 import type { Hospital } from '@/generated/prisma/client'
 import { decryptSecret } from './crypto'
 import { ALL_MODULE_IDS } from './modules'
+import { verifyText } from './signing'
 
 // Lecture des bases des hôpitaux (§5) avec les accès enregistrés dans `Hospital`. Lecture seule,
 // délais courts (une base lente ou coupée ne bloque jamais l'affichage), résultats gardés en
@@ -31,6 +32,8 @@ export interface HospitalOverview {
   cashThisMonth: number | null
   lastMigration: { name: string; appliedAt: string } | null
   lastActivityAt: string | null
+  /** Abonnement lu dans la base de l'hôpital : null = jamais activé ; valid = signature Pandora correcte. */
+  subscription: { endDate: string; issuedAt: string; items: string[]; modules: string[]; valid: boolean } | null
 }
 
 const CACHE_TTL_MS = 2 * 60 * 1000
@@ -134,6 +137,18 @@ export async function readOverview(hospital: Hospital, options: { force?: boolea
     const count = (sql: string, params: unknown[] = []) =>
       safe(async () => toNumber(((await c.query(sql, params)) as { n: unknown }[])[0]?.n))
 
+    const subscription = await safe(async () => {
+      const rows = (await c.query("SELECT payload, signature FROM subscription WHERE id = 'current'")) as { payload: string; signature: string }[]
+      if (!rows[0]) return null
+      const p = JSON.parse(rows[0].payload) as { hospitalId: string; endDate: string; issuedAt: string; items: string[]; modules: string[] }
+      return {
+        endDate: p.endDate,
+        issuedAt: p.issuedAt,
+        items: p.items ?? [],
+        modules: p.modules ?? [],
+        valid: verifyText(rows[0].payload, rows[0].signature) && p.hospitalId === hospital.id
+      }
+    })
     const [patients, activeUsers, consultationsThisMonth, cashThisMonth, lastMigration, lastActivity] = await Promise.all([
       count('SELECT COUNT(*) AS n FROM patient WHERE deletedAt IS NULL'),
       count('SELECT COUNT(*) AS n FROM `user` WHERE isActive = 1'),
@@ -162,7 +177,8 @@ export async function readOverview(hospital: Hospital, options: { force?: boolea
       consultationsThisMonth,
       cashThisMonth,
       lastMigration,
-      lastActivityAt: lastActivity
+      lastActivityAt: lastActivity,
+      subscription
     }
   } catch (error) {
     data = {
@@ -176,7 +192,8 @@ export async function readOverview(hospital: Hospital, options: { force?: boolea
       consultationsThisMonth: null,
       cashThisMonth: null,
       lastMigration: null,
-      lastActivityAt: null
+      lastActivityAt: null,
+      subscription: null
     }
   } finally {
     await connection?.end().catch(() => undefined)

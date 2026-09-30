@@ -2,12 +2,15 @@ import Link from 'next/link'
 import { prisma } from '@/lib/db'
 import { requireAccount } from '@/lib/auth'
 import { readOverviews } from '@/lib/hospital-db'
+import { subscriptionStatus } from '@/lib/subscription-status'
 import { Badge, Card, MOBILE_STATUS, PageTitle, Stat, formatDate, formatFcfa } from '@/components/ui'
 
 export const metadata = { title: 'Tableau de bord — Pandora' }
 
 export default async function DashboardPage() {
-  await requireAccount()
+  const account = await requireAccount()
+  // Montants (FCFA) réservés aux admins : les prospecteurs n'en ont pas l'usage.
+  const isAdmin = account.role === 'ADMIN'
   const hospitals = await prisma.hospital.findMany({ orderBy: { name: 'asc' } })
   const overviews = await readOverviews(hospitals)
 
@@ -19,6 +22,16 @@ export default async function DashboardPage() {
     INSTALLEE: hospitals.filter((h) => h.mobileStatus === 'INSTALLEE').length,
     SOUHAITEE: hospitals.filter((h) => h.mobileStatus === 'SOUHAITEE').length
   }
+  const subKeys = reachable.map((h) => subscriptionStatus(overviews.get(h.id)?.subscription).key)
+  const subCount = (...keys: string[]) => subKeys.filter((k) => keys.includes(k)).length
+  const monthRevenue = isAdmin
+    ? ((
+        await prisma.payment.aggregate({
+          _sum: { amount: true },
+          where: { status: 'APPLIQUE', paidAt: { gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1) } }
+        })
+      )._sum.amount ?? 0)
+    : 0
   const recentActivity = hospitals
     .map((h) => ({ hospital: h, at: overviews.get(h.id)?.lastActivityAt ?? null }))
     .filter((r) => r.at)
@@ -37,10 +50,15 @@ export default async function DashboardPage() {
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Stat label="Encaissé en caisse ce mois" value={formatFcfa(sum('cashThisMonth'))} hint="tous hôpitaux confondus" />
-        <Stat label="Abonnements à jour" value="—" hint="disponible à l'étape abonnements" />
-        <Stat label="Abonnements expirés" value="—" hint="disponible à l'étape abonnements" />
-        <Stat label="Recettes d'abonnement du mois" value="—" hint="disponible à l'étape paiements" />
+        {isAdmin && <Stat label="Encaissé en caisse ce mois" value={formatFcfa(sum('cashThisMonth'))} hint="tous hôpitaux confondus" />}
+        <Stat label="Abonnements à jour" value={subCount('ok', 'soon')} hint={`dont ${subCount('soon')} expirant sous 7 jours`} tone="success" />
+        <Stat
+          label="Abonnements expirés"
+          value={subCount('expired', 'invalid')}
+          hint={`${subCount('none')} non activé(s)`}
+          tone={subCount('expired', 'invalid') ? 'danger' : undefined}
+        />
+        {isAdmin && <Stat label="Recettes d'abonnement du mois" value={formatFcfa(monthRevenue)} hint="paiements appliqués" />}
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">

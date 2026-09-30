@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { requireAccount } from '@/lib/auth'
 import { readOverviews } from '@/lib/hospital-db'
 import { ALL_MODULE_IDS } from '@/lib/modules'
+import { formatYmd, subscriptionStatus } from '@/lib/subscription-status'
 import { Badge, Card, MOBILE_STATUS, PageTitle, buttonPrimary, formatDate } from '@/components/ui'
 
 export const metadata = { title: 'Hôpitaux — Pandora' }
@@ -39,6 +40,7 @@ export default async function HospitalsPage() {
               <tr className="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-400">
                 <th className="px-5 py-3 font-medium">Hôpital</th>
                 <th className="px-5 py-3 font-medium">Base</th>
+                <th className="px-5 py-3 font-medium">Abonnement</th>
                 <th className="px-5 py-3 font-medium">Modules</th>
                 <th className="px-5 py-3 font-medium">Patients</th>
                 <th className="px-5 py-3 font-medium">Version mobile</th>
@@ -58,6 +60,16 @@ export default async function HospitalsPage() {
                     </td>
                     <td className="px-5 py-3">
                       {o?.reachable ? <Badge tone="success">Joignable</Badge> : <Badge tone="danger">Injoignable</Badge>}
+                    </td>
+                    <td className="px-5 py-3">
+                      {o?.reachable ? (
+                        <>
+                          <Badge tone={subscriptionStatus(o.subscription).tone}>{subscriptionStatus(o.subscription).label}</Badge>
+                          {o.subscription && <p className="mt-0.5 text-xs text-gray-400">jusqu&apos;au {formatYmd(o.subscription.endDate)}</p>}
+                        </>
+                      ) : (
+                        '—'
+                      )}
                     </td>
                     <td className="px-5 py-3 text-gray-600">
                       {o?.reachable ? `${o.enabledModules.length} / ${ALL_MODULE_IDS.length}` : '—'}

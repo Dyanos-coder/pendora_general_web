@@ -50,8 +50,12 @@ model Hospital {
   mobileStatus  MobileStatus @default(NON_SOUHAITEE)
   installedAt   DateTime     @default(now())
   notes         String?      @db.Text
+  // Secret partagé avec l'application de l'hôpital (chiffré), pour authentifier ses appels au site
+  // (paiement d'abonnement). Écrit aussi dans la base de l'hôpital (table pandora_link).
+  linkSecretEnc String?      @db.Text
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
+  payments      Payment[]
 
   @@map("hospital")
 }
@@ -91,4 +95,69 @@ model ContactRequest {
 
   @@index([status, createdAt])
   @@map("contact_request")
+}
+
+// --- Abonnements (Plan-Site-Pandora.md §6) ------------------------------------------------------
+
+// Élément facturable de la grille : un forfait (ex. Gestion financière = Caisse + Comptabilité) ou
+// un module vendu à l'unité (ex. Laboratoire). `modules` = identifiants de modules de l'application.
+model PriceItem {
+  key        String  @id
+  offer      String
+  label      String
+  price      Int
+  modules    String  @db.Text
+  mandatory  Boolean @default(false)
+  comingSoon Boolean @default(false)
+  active     Boolean @default(true)
+  sortOrder  Int     @default(0)
+
+  @@map("price_item")
+}
+
+enum PaymentMethod {
+  MONEYFUSION
+  MANUEL
+}
+
+enum PaymentStatus {
+  EN_ATTENTE
+  PAYE
+  APPLIQUE
+  ECHEC
+  ANNULE
+}
+
+// Un paiement d'abonnement : MoneyFusion (depuis l'application de l'hôpital) ou saisi à la main
+// par un admin. `items`/`modules` = sélection complète souhaitée ; appliqué une seule fois.
+model Payment {
+  id                String        @id @default(uuid())
+  hospitalId        String
+  hospital          Hospital      @relation(fields: [hospitalId], references: [id])
+  method            PaymentMethod
+  status            PaymentStatus @default(EN_ATTENTE)
+  items             String        @db.Text
+  modules           String        @db.Text
+  months            Int
+  amount            Int
+  prorataAmount     Int           @default(0)
+  previousEndDate   String?
+  newEndDate        String?
+  moneyfusionToken  String?       @unique
+  moneyfusionUrl    String?       @db.Text
+  payerName         String?
+  payerPhone        String?
+  transactionNumber String?
+  paymentMeans      String?
+  note              String?       @db.Text
+  recordedById      String?
+  events            String?       @db.Text
+  lastError         String?       @db.Text
+  createdAt         DateTime      @default(now())
+  paidAt            DateTime?
+  appliedAt         DateTime?
+
+  @@index([hospitalId, createdAt])
+  @@index([status])
+  @@map("payment")
 }

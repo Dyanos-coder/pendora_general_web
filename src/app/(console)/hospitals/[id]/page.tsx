@@ -8,6 +8,7 @@ import { Badge, Card, PageTitle, Stat, formatDate, formatFcfa } from '@/componen
 import { HospitalForm } from '../HospitalForm'
 import { MobileStatusSelect } from './MobileStatusSelect'
 import { RefreshButton } from './RefreshButton'
+import { SubscriptionPanel } from './SubscriptionPanel'
 
 export default async function HospitalPage({ params }: PageProps<'/hospitals/[id]'>) {
   const account = await requireAccount()
@@ -37,7 +38,11 @@ export default async function HospitalPage({ params }: PageProps<'/hospitals/[id
         <Stat label="Patients" value={o.patients?.toLocaleString('fr-FR') ?? '—'} />
         <Stat label="Utilisateurs actifs" value={o.activeUsers ?? '—'} />
         <Stat label="Consultations ce mois" value={o.consultationsThisMonth ?? '—'} />
-        <Stat label="Encaissé en caisse ce mois" value={o.cashThisMonth === null ? '—' : formatFcfa(o.cashThisMonth)} />
+        {account.role === 'ADMIN' ? (
+          <Stat label="Encaissé en caisse ce mois" value={o.cashThisMonth === null ? '—' : formatFcfa(o.cashThisMonth)} />
+        ) : (
+          <Stat label="Modules installés" value={o.reachable ? o.enabledModules.length : '—'} />
+        )}
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -91,12 +96,10 @@ export default async function HospitalPage({ params }: PageProps<'/hospitals/[id
             </dl>
             {hospital.notes && <p className="mt-3 rounded-lg bg-gray-50 p-2.5 text-xs text-gray-600">{hospital.notes}</p>}
           </Card>
-          <Card>
-            <h2 className="mb-1 text-sm font-semibold text-gray-900">Abonnement</h2>
-            <p className="text-sm text-gray-400">Disponible à l&apos;étape abonnements.</p>
-          </Card>
         </div>
       </div>
+
+      <SubscriptionPanel hospital={hospital} overview={o} isAdmin={account.role === 'ADMIN'} />
 
       {account.role === 'ADMIN' && (
         <Card className="mt-6 max-w-2xl">
