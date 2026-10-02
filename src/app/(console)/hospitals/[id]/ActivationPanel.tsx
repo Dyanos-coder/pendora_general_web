@@ -24,7 +24,8 @@ export async function ActivationPanel({ hospital, isAdmin }: { hospital: Hospita
       <h2 className="text-sm font-semibold text-gray-900">Code d&apos;activation</h2>
       <p className="mb-4 mt-0.5 text-xs text-gray-500">
         À saisir dans l&apos;application Pandora Health au premier lancement de chaque poste : l&apos;application récupère
-        alors seule les accès à la base. Ne le communiquez qu&apos;à l&apos;hôpital.
+        alors seule les accès à la base. Le code est vérifié à chaque lancement : le régénérer oblige tous les postes à
+        saisir le nouveau. Ne le communiquez qu&apos;à l&apos;hôpital.
       </p>
       <ActivationCode hospitalId={hospital.id} code={readActivationCode(hospital)} />
 

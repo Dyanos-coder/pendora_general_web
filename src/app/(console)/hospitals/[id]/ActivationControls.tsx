@@ -13,7 +13,7 @@ export function ActivationCode({ hospitalId, code }: { hospitalId: string; code:
 
   function regenerate(): void {
     const message = code
-      ? 'Générer un nouveau code ? L’ancien ne permettra plus d’activer de poste (les postes déjà activés continuent de fonctionner).'
+      ? 'Générer un nouveau code ? L’ancien ne fonctionnera plus : chaque poste de l’hôpital redemandera le nouveau code à son prochain lancement.'
       : 'Générer le code d’activation de cet hôpital ?'
     if (!window.confirm(message)) return
     startTransition(async () => setState(await regenerateActivationCode(hospitalId)))

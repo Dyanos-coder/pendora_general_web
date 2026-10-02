@@ -1,7 +1,9 @@
 import { prisma } from '@/lib/db'
-import { authenticateDevice, dbAccessPayload } from '@/lib/activation'
+import { authenticateDevice, dbAccessPayload, hashActivationCode } from '@/lib/activation'
 
-/** Accès à jour de la base pour un poste déjà activé (mot de passe changé, base déplacée…). */
+/** Contrôle d'un poste au lancement de l'application : son code d'activation doit toujours être
+ * celui de l'hôpital (sinon il est redemandé), puis il reçoit les accès à jour de la base (mot de
+ * passe changé, base déplacée…). */
 export async function POST(request: Request) {
   const auth = await authenticateDevice(request)
   if (!auth.ok) {
@@ -12,7 +14,14 @@ export async function POST(request: Request) {
       { status: auth.reason === 'REVOKED' ? 403 : 401 }
     )
   }
-  const input = (await request.json().catch(() => ({}))) as { appVersion?: string }
+  const input = (await request.json().catch(() => ({}))) as { appVersion?: string; code?: string }
+  const hospital = auth.device.hospital
+  if (!input.code || !hospital.activationCodeHash || hashActivationCode(input.code) !== hospital.activationCodeHash) {
+    return Response.json(
+      { ok: false, reason: 'CODE_CHANGED', error: 'Le code d’activation de votre établissement a changé. Saisissez le nouveau code fourni par Pandora.' },
+      { status: 403 }
+    )
+  }
   await prisma.device.update({
     where: { id: auth.device.id },
     data: { lastSeenAt: new Date(), ...(input.appVersion ? { appVersion: input.appVersion.slice(0, 40) } : {}) }

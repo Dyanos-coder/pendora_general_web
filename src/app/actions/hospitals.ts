@@ -144,14 +144,14 @@ export async function refreshHospital(hospitalId: string): Promise<void> {
 }
 
 /** Nouveau code d'activation (ou premier code d'un hôpital ajouté avant les codes) : l'ancien ne
- * permet plus d'activer de poste ; les postes déjà activés ne sont pas touchés. */
+ * fonctionne plus, et chaque poste redemande le nouveau code à son prochain lancement. */
 export async function regenerateActivationCode(hospitalId: string): Promise<FormState> {
   const admin = await requireAccount('ADMIN')
   if (!(await prisma.hospital.findUnique({ where: { id: hospitalId } }))) return { error: 'Hôpital introuvable.' }
   await assignActivationCode(hospitalId)
   await logAudit(admin.id, 'hospital.activation_code', hospitalId)
   revalidatePath(`/hospitals/${encodeURIComponent(hospitalId)}`)
-  return { success: 'Nouveau code généré. L’ancien ne fonctionne plus.' }
+  return { success: 'Nouveau code généré. Les postes le redemanderont à leur prochain lancement.' }
 }
 
 /** Révoque un poste : il ne peut plus récupérer les accès à la base et redemandera un code. */
