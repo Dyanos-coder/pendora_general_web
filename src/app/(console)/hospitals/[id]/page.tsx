@@ -9,6 +9,7 @@ import { HospitalForm } from '../HospitalForm'
 import { MobileStatusSelect } from './MobileStatusSelect'
 import { RefreshButton } from './RefreshButton'
 import { SubscriptionPanel } from './SubscriptionPanel'
+import { ActivationPanel } from './ActivationPanel'
 
 export default async function HospitalPage({ params }: PageProps<'/hospitals/[id]'>) {
   const account = await requireAccount()
@@ -98,6 +99,8 @@ export default async function HospitalPage({ params }: PageProps<'/hospitals/[id
           </Card>
         </div>
       </div>
+
+      <ActivationPanel hospital={hospital} isAdmin={account.role === 'ADMIN'} />
 
       <SubscriptionPanel hospital={hospital} overview={o} isAdmin={account.role === 'ADMIN'} />
 

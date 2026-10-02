@@ -53,9 +53,15 @@ model Hospital {
   // Secret partagé avec l'application de l'hôpital (chiffré), pour authentifier ses appels au site
   // (paiement d'abonnement). Écrit aussi dans la base de l'hôpital (table pandora_link).
   linkSecretEnc String?      @db.Text
+  // Code d'activation des postes (Plan-Code-Activation.md) : un par hôpital, réutilisable,
+  // régénérable. Empreinte SHA-256 pour la recherche, version chiffrée pour le réafficher aux admins.
+  activationCodeHash String?   @unique
+  activationCodeEnc  String?   @db.Text
+  activationCodeAt   DateTime?
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
   payments      Payment[]
+  devices       Device[]
 
   @@map("hospital")
 }
@@ -160,4 +166,21 @@ model Payment {
   @@index([hospitalId, createdAt])
   @@index([status])
   @@map("payment")
+}
+
+// Poste activé avec le code d'activation de son hôpital. Le jeton (seule son empreinte est gardée)
+// permet au poste de récupérer les accès à jour de la base ; un poste révoqué n'y a plus droit.
+model Device {
+  id         String    @id @default(uuid())
+  hospitalId String
+  hospital   Hospital  @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  name       String
+  tokenHash  String    @unique
+  appVersion String?
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  revokedAt  DateTime?
+
+  @@index([hospitalId])
+  @@map("device")
 }

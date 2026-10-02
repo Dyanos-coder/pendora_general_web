@@ -83,17 +83,27 @@ function describeError(error: unknown): string {
   return e.message ?? 'Connexion impossible.'
 }
 
-/** Test d'accès avant enregistrement d'un hôpital : vérifie aussi qu'il s'agit bien d'une base
- * Pandora Health (table `company` présente) et renvoie le nom de l'établissement. */
-export async function testAccess(access: HospitalDbAccess): Promise<{ ok: true; companyName: string | null } | { ok: false; error: string }> {
+/** Test d'accès : vérifie qu'il s'agit d'une base Pandora Health (table `company` présente) et
+ * renvoie le nom de l'établissement. Avec `requirePandora: false`, une base **vide** est acceptée
+ * (nouvel hôpital : l'application la préparera à la première activation d'un poste) ; une base qui
+ * contient autre chose reste refusée. */
+export async function testAccess(
+  access: HospitalDbAccess,
+  options: { requirePandora?: boolean } = {}
+): Promise<{ ok: true; companyName: string | null; empty: boolean } | { ok: false; error: string }> {
   let connection: Connection | undefined
   try {
     connection = await openConnection(access)
-    const rows = (await connection.query('SELECT name FROM company LIMIT 1')) as { name: string }[]
-    return { ok: true, companyName: rows[0]?.name ?? null }
+    try {
+      const rows = (await connection.query('SELECT name FROM company LIMIT 1')) as { name: string }[]
+      return { ok: true, companyName: rows[0]?.name ?? null, empty: false }
+    } catch (error) {
+      if ((error as { errno?: number }).errno !== 1146) throw error
+      const tables = (await connection.query('SHOW TABLES')) as unknown[]
+      if (options.requirePandora === false && tables.length === 0) return { ok: true, companyName: null, empty: true }
+      return { ok: false, error: "Connexion réussie, mais ce n'est pas une base Pandora Health (table « company » absente)." }
+    }
   } catch (error) {
-    const e = error as { errno?: number }
-    if (e.errno === 1146) return { ok: false, error: "Connexion réussie, mais ce n'est pas une base Pandora Health (table « company » absente)." }
     return { ok: false, error: describeError(error) }
   } finally {
     await connection?.end().catch(() => undefined)

@@ -7,6 +7,7 @@ import { requireAccount } from '@/lib/auth'
 import { logAudit } from '@/lib/audit'
 import { encryptSecret, decryptSecret } from '@/lib/crypto'
 import { forgetOverview, testAccess, type HospitalDbAccess } from '@/lib/hospital-db'
+import { assignActivationCode } from '@/lib/activation'
 import type { MobileStatus } from '@/generated/prisma/client'
 import type { FormState } from './form-state'
 
@@ -47,10 +48,10 @@ export async function testHospitalAccess(_prev: FormState, formData: FormData): 
   const existing = hospitalId ? await prisma.hospital.findUnique({ where: { id: hospitalId } }) : null
   const access = readAccess(formData, existing ? decryptSecret(existing.dbPasswordEnc) : undefined)
   if ('error' in access) return { error: access.error }
-  const result = await testAccess(access)
-  return result.ok
-    ? { success: `Connexion réussie${result.companyName ? ` — établissement « ${result.companyName} »` : ''}.` }
-    : { error: result.error }
+  const result = await testAccess(access, { requirePandora: false })
+  if (!result.ok) return { error: result.error }
+  if (result.empty) return { success: 'Connexion réussie — base vide : l’application la préparera à l’activation du premier poste.' }
+  return { success: `Connexion réussie${result.companyName ? ` — établissement « ${result.companyName} »` : ''}.` }
 }
 
 export async function createHospital(_prev: FormState, formData: FormData): Promise<FormState> {
@@ -65,7 +66,7 @@ export async function createHospital(_prev: FormState, formData: FormData): Prom
   if (await prisma.hospital.findUnique({ where: { id } })) {
     return fail(formData, `Un hôpital utilise déjà l'utilisateur de base « ${id} ».`)
   }
-  const test = await testAccess(access)
+  const test = await testAccess(access, { requirePandora: false })
   if (!test.ok) return fail(formData, `Connexion impossible : ${test.error}`)
 
   const mobileStatus = String(formData.get('mobileStatus') ?? 'NON_SOUHAITEE') as MobileStatus
@@ -83,6 +84,8 @@ export async function createHospital(_prev: FormState, formData: FormData): Prom
       notes: String(formData.get('notes') ?? '').trim() || null
     }
   })
+  // Code d'activation des postes, à donner à l'hôpital (Plan-Code-Activation.md).
+  await assignActivationCode(id)
   await logAudit(admin.id, 'hospital.create', id, name)
   forgetOverview(id)
   revalidatePath('/hospitals')
@@ -99,7 +102,7 @@ export async function updateHospital(_prev: FormState, formData: FormData): Prom
   // Mot de passe laissé vide = conserver l'actuel.
   const access = readAccess(formData, decryptSecret(existing.dbPasswordEnc))
   if ('error' in access) return fail(formData, access.error)
-  const test = await testAccess(access)
+  const test = await testAccess(access, { requirePandora: false })
   if (!test.ok) return fail(formData, `Connexion impossible : ${test.error}`)
 
   await prisma.hospital.update({
@@ -138,4 +141,25 @@ export async function refreshHospital(hospitalId: string): Promise<void> {
   await requireAccount()
   forgetOverview(hospitalId)
   revalidatePath(`/hospitals/${encodeURIComponent(hospitalId)}`)
+}
+
+/** Nouveau code d'activation (ou premier code d'un hôpital ajouté avant les codes) : l'ancien ne
+ * permet plus d'activer de poste ; les postes déjà activés ne sont pas touchés. */
+export async function regenerateActivationCode(hospitalId: string): Promise<FormState> {
+  const admin = await requireAccount('ADMIN')
+  if (!(await prisma.hospital.findUnique({ where: { id: hospitalId } }))) return { error: 'Hôpital introuvable.' }
+  await assignActivationCode(hospitalId)
+  await logAudit(admin.id, 'hospital.activation_code', hospitalId)
+  revalidatePath(`/hospitals/${encodeURIComponent(hospitalId)}`)
+  return { success: 'Nouveau code généré. L’ancien ne fonctionne plus.' }
+}
+
+/** Révoque un poste : il ne peut plus récupérer les accès à la base et redemandera un code. */
+export async function revokeDevice(deviceId: string): Promise<void> {
+  const admin = await requireAccount('ADMIN')
+  const device = await prisma.device.findUnique({ where: { id: deviceId } })
+  if (!device || device.revokedAt) return
+  await prisma.device.update({ where: { id: deviceId }, data: { revokedAt: new Date() } })
+  await logAudit(admin.id, 'device.revoke', device.hospitalId, `${device.name} (${device.id})`)
+  revalidatePath(`/hospitals/${encodeURIComponent(device.hospitalId)}`)
 }
