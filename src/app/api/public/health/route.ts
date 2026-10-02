@@ -6,7 +6,7 @@ import mariadb, { type Connection } from 'mariadb'
 export const dynamic = 'force-dynamic'
 
 const REQUIRED = ['DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASSWORD', 'SESSION_SECRET', 'CREDENTIALS_KEY', 'SITE_URL', 'SUBSCRIPTION_PRIVATE_KEY', 'MONEYFUSION_API_URL']
-const TABLES = ['account', 'hospital', 'audit_log', 'contact_request', 'price_item', 'payment']
+const TABLES = ['account', 'hospital', 'audit_log', 'contact_request', 'price_item', 'payment', 'device']
 
 export async function GET() {
   const missingEnv = REQUIRED.filter((name) => !process.env[name])
