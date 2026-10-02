@@ -18,7 +18,7 @@ npm run dev                 # http://localhost:3000
 ## Scripts
 
 - `npm run dev` : serveur de développement
-- `npm run build` / `npm start` : build et serveur de production
+- `npm run build` / `npm start` : build et serveur de production — le build applique d’abord les migrations de la base du site (`prisma migrate deploy`), y compris sur Vercel : un déploiement ne peut donc plus partir avec une base en retard
 - `npm run typecheck` : génération des types de routes + `tsc`
 - `npm run lint` : ESLint
 - `npm run admin:create -- <email> <mot-de-passe> "<Nom>"` : crée ou réinitialise un compte admin
