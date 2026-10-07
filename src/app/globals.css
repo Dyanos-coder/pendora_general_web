@@ -1,25 +1,125 @@
 @import 'tailwindcss';
 
-/* Même identité visuelle que l'application Pandora Health (app-core) : accent indigo, fond gris
-   clair, police système. */
+/* Identité « Néon clinique », la même que l'application Pandora Health (HOSPITAL/Plan-Refonte-Graphique.md) :
+   vert néon et or de l'orbite du logo, structure « encre » noir-vert, neutres teintés vert.
+   Polices chargées par next/font (voir layout.tsx) et exposées en variables CSS. */
 @theme {
-  --color-accent-800: #312e81;
-  --color-accent-700: #3730a3;
-  --color-accent-600: #4338ca;
-  --color-accent-500: #4f46e5;
-  --color-accent-400: #818cf8;
-  --color-accent-200: #c7d2fe;
-  --color-accent-100: #e0e7ff;
-  --color-accent-50: #eef2ff;
+  --font-sans: var(--font-inter), 'Segoe UI', system-ui, sans-serif;
+  --font-display: var(--font-manrope), 'Segoe UI', system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), 'Cascadia Mono', Consolas, monospace;
+
+  --color-surface: #ffffff;
+
+  /* Encre : structure sombre (barre latérale, connexion, sections de marque). */
+  --color-ink-950: #060c09;
+  --color-ink-900: #0d1812;
+  --color-ink-800: #15241b;
+  --color-ink-700: #22352a;
+  --color-ink-600: #33493c;
+
+  /* Vert Pandora : actions, sélection, liens. */
+  --color-accent-50: #ecfdf1;
+  --color-accent-100: #d3f9de;
+  --color-accent-200: #a8f0c0;
+  --color-accent-300: #6fe297;
+  --color-accent-400: #34cc6b;
+  --color-accent-500: #12a04a;
+  --color-accent-600: #0a8238;
+  --color-accent-700: #086b2e;
+  --color-accent-800: #0b5527;
+  --color-accent-900: #0e4a27;
+  --color-accent-950: #052e16;
+
+  /* Or orbite : moments importants (abonnement, recettes), avec parcimonie. */
+  --color-gold-50: #fefaec;
+  --color-gold-100: #fcf3dc;
+  --color-gold-200: #fbe8b3;
+  --color-gold-300: #f6d47c;
+  --color-gold-400: #efbc48;
+  --color-gold-500: #dea127;
+  --color-gold-600: #b9811b;
+  --color-gold-700: #8f6217;
+  --color-gold-800: #6b4a10;
+  --color-gold-900: #4a3308;
+  --color-gold-950: #2e1f04;
+
+  /* Neutres teintés vert. */
+  --color-gray-50: #f5f8f6;
+  --color-gray-100: #eaf0ec;
+  --color-gray-200: #dbe4de;
+  --color-gray-300: #c2cfc7;
+  --color-gray-400: #83938a;
+  --color-gray-500: #677a70;
+  --color-gray-600: #4d5e55;
+  --color-gray-700: #3a4941;
+  --color-gray-800: #25322b;
+  --color-gray-900: #141e18;
+  --color-gray-950: #0a120d;
 }
 
 body {
   @apply bg-gray-50 text-gray-900 antialiased;
-  font-family:
-    system-ui,
-    -apple-system,
-    'Segoe UI',
-    Roboto,
-    Arial,
-    sans-serif;
+  font-family: var(--font-sans);
+}
+
+@layer base {
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+  table,
+  input,
+  select {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Signature de marque : orbite dorée autour du logo, pouls ECG qui défile. */
+@keyframes pandora-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes pandora-ecg {
+  from {
+    stroke-dashoffset: 1200;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes pandora-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.animate-orbit {
+  animation: pandora-orbit 9s linear infinite;
+}
+.animate-ecg {
+  stroke-dasharray: 1200;
+  animation: pandora-ecg 6s linear infinite;
+}
+.animate-pulse-dot {
+  animation: pandora-pulse 2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-orbit,
+  .animate-ecg,
+  .animate-pulse-dot {
+    animation: none !important;
+  }
+}
+
+/* Barre latérale sombre : barre de défilement fine et discrète. */
+.rail-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #22352a transparent;
 }

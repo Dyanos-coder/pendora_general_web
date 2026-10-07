@@ -58,7 +58,7 @@ export default async function DashboardPage() {
           hint={`${subCount('none')} non activé(s)`}
           tone={subCount('expired', 'invalid') ? 'danger' : undefined}
         />
-        {isAdmin && <Stat label="Recettes d'abonnement du mois" value={formatFcfa(monthRevenue)} hint="paiements appliqués" />}
+        {isAdmin && <Stat label="Recettes d'abonnement du mois" value={formatFcfa(monthRevenue)} hint="paiements appliqués" tone="gold" />}
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">

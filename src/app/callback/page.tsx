@@ -29,7 +29,7 @@ export default async function CallbackPage({ searchParams }: PageProps<'/callbac
 
   const content = {
     success: {
-      icon: <CheckCircle2 className="h-12 w-12 text-emerald-500" />,
+      icon: <CheckCircle2 className="h-12 w-12 text-teal-500" />,
       title: 'Paiement reçu',
       text: `Votre abonnement est prolongé jusqu'au ${formatDay(payment?.newEndDate ?? null)}. Vous pouvez retourner dans l'application Pandora Health : il s'y met à jour automatiquement.`
     },

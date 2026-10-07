@@ -32,7 +32,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<'/payment
       <PageTitle title="Paiements" subtitle="Paiements MoneyFusion et paiements manuels des abonnements." />
 
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Stat label="Recettes du mois" value={formatFcfa(monthTotal._sum.amount ?? 0)} hint="paiements appliqués" />
+        <Stat label="Recettes du mois" value={formatFcfa(monthTotal._sum.amount ?? 0)} hint="paiements appliqués" tone="gold" />
         <Stat label="À traiter" value={todo} tone={todo ? 'warning' : 'success'} hint="en attente ou payés non appliqués" />
       </div>
 

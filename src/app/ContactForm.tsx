@@ -12,8 +12,8 @@ export function ContactForm() {
 
   if (state?.success) {
     return (
-      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-center">
-        <p className="text-base font-semibold text-emerald-800">{state.success}</p>
+      <div className="rounded-xl border border-teal-200 bg-teal-50 p-6 text-center">
+        <p className="text-base font-semibold text-teal-800">{state.success}</p>
       </div>
     )
   }

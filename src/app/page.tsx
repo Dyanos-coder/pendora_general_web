@@ -74,16 +74,27 @@ const STEPS = [
   { title: 'Abonnement', text: 'Vous ne payez que les modules choisis, de 1 à 24 mois, directement depuis le logiciel par Mobile Money.' }
 ]
 
+// Bandeau et prix de chaque offre : familles de la marque (vert, or, turquoise, bleu) plutôt que
+// huit couleurs différentes.
+const BRAND = { bar: 'bg-gradient-to-r from-accent-500 to-[#34cc6b]', chip: 'bg-accent-50 text-accent-700', price: 'text-accent-700' }
+const GOLD = { bar: 'bg-gradient-to-r from-gold-500 to-gold-300', chip: 'bg-gold-100 text-gold-700', price: 'text-gold-700' }
+const TEAL = { bar: 'bg-teal-500', chip: 'bg-teal-50 text-teal-700', price: 'text-teal-700' }
+const BLUE = { bar: 'bg-blue-500', chip: 'bg-blue-50 text-blue-700', price: 'text-blue-700' }
 const OFFER_STYLE: Record<Offer['color'], { bar: string; chip: string; price: string }> = {
-  emerald: { bar: 'bg-emerald-500', chip: 'bg-emerald-50 text-emerald-700', price: 'text-emerald-700' },
-  sky: { bar: 'bg-sky-500', chip: 'bg-sky-50 text-sky-700', price: 'text-sky-700' },
-  orange: { bar: 'bg-orange-500', chip: 'bg-orange-50 text-orange-700', price: 'text-orange-700' },
-  violet: { bar: 'bg-violet-500', chip: 'bg-violet-50 text-violet-700', price: 'text-violet-700' },
-  teal: { bar: 'bg-teal-500', chip: 'bg-teal-50 text-teal-700', price: 'text-teal-700' },
-  pink: { bar: 'bg-pink-500', chip: 'bg-pink-50 text-pink-700', price: 'text-pink-700' },
-  indigo: { bar: 'bg-indigo-500', chip: 'bg-indigo-50 text-indigo-700', price: 'text-indigo-700' },
-  green: { bar: 'bg-green-600', chip: 'bg-green-50 text-green-700', price: 'text-green-700' }
+  emerald: BRAND,
+  sky: BLUE,
+  orange: GOLD,
+  violet: TEAL,
+  teal: TEAL,
+  pink: GOLD,
+  indigo: BLUE,
+  green: BRAND
 }
+
+const ECG_PATH =
+  'M0 35 H120 L132 35 L140 22 L148 35 H170 L180 35 L188 6 L198 62 L206 35 H240 L252 28 L262 35 ' +
+  'H520 L532 35 L540 22 L548 35 H570 L580 35 L588 6 L598 62 L606 35 H640 L652 28 L662 35 ' +
+  'H920 L932 35 L940 22 L948 35 H970 L980 35 L988 6 L998 62 L1006 35 H1040 L1052 28 L1062 35 H1200'
 
 function price(amount: number): string {
   return amount.toLocaleString('fr-FR')
@@ -98,8 +109,8 @@ export default function LandingPage() {
           <Link href="/" className="flex items-center gap-2.5">
             <Image src="/logo.png" alt="" width={36} height={36} className="rounded-xl" priority />
             <span className="leading-tight">
-              <span className="block text-sm font-bold tracking-tight">PANDORA</span>
-              <span className="block text-xs font-semibold tracking-wide text-accent-600">HEALTH</span>
+              <span className="block font-display text-sm font-extrabold tracking-[0.04em]">PANDORA</span>
+              <span className="block text-[10px] font-semibold tracking-[0.24em] text-gold-600">HEALTH</span>
             </span>
           </Link>
           <nav className="hidden items-center gap-7 text-sm font-medium text-gray-600 md:flex">
@@ -119,7 +130,7 @@ export default function LandingPage() {
           <div className="flex items-center gap-2">
             <a
               href="#contact"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-accent-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-accent-700"
+              className="inline-flex items-center gap-1.5 rounded-[10px] bg-gradient-to-b from-accent-500 to-accent-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-accent-600/25 transition hover:shadow-[0_0_0_4px_var(--color-accent-100),0_0_18px_rgba(52,204,107,0.35)]"
             >
               Demander une démo
             </a>
@@ -128,17 +139,20 @@ export default function LandingPage() {
       </header>
 
       {/* Hero */}
-      <section className="relative overflow-hidden bg-[#0b0a14] text-white">
-        <div className="pointer-events-none absolute -top-40 left-1/2 h-[520px] w-[900px] -translate-x-1/2 rounded-full bg-accent-600/30 blur-[120px]" />
-        <div className="pointer-events-none absolute bottom-0 right-0 h-72 w-72 rounded-full bg-emerald-500/10 blur-[100px]" />
+      <section className="relative overflow-hidden bg-ink-950 text-white">
+        <div className="pointer-events-none absolute -top-40 left-1/2 h-[520px] w-[900px] -translate-x-1/2 rounded-full bg-accent-600/25 blur-[120px]" />
+        <div className="pointer-events-none absolute right-0 bottom-0 h-72 w-72 rounded-full bg-gold-500/10 blur-[100px]" />
+        <svg className="pointer-events-none absolute inset-x-0 bottom-4 h-[60px] w-full opacity-40" viewBox="0 0 1200 70" preserveAspectRatio="none" aria-hidden="true">
+          <path className="animate-ecg" d={ECG_PATH} fill="none" stroke="#34cc6b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
         <div className="relative mx-auto grid max-w-6xl items-center gap-14 px-5 py-20 lg:grid-cols-2 lg:py-28">
           <div>
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-medium text-accent-200">
+            <span className="inline-flex items-center gap-2 rounded-full border border-gold-400/30 bg-gold-400/10 px-3 py-1 text-xs font-medium text-gold-300">
               <HeartPulse className="h-3.5 w-3.5" />
               Logiciel de gestion hospitalière
             </span>
             <h1 className="mt-6 text-4xl font-bold leading-[1.1] tracking-tight sm:text-5xl">
-              Tout votre établissement de santé, <span className="text-accent-400">dans un seul logiciel.</span>
+              Tout votre établissement de santé, <span className="text-[#34cc6b]">dans un seul logiciel.</span>
             </h1>
             <p className="mt-6 max-w-xl text-lg leading-relaxed text-gray-300">
               Dossier patient, examens, pharmacie, caisse et comptabilité réunis — un outil simple pour vos équipes, qui continue
@@ -147,14 +161,14 @@ export default function LandingPage() {
             <div className="mt-8 flex flex-wrap gap-3">
               <a
                 href="#contact"
-                className="inline-flex items-center gap-2 rounded-lg bg-accent-500 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-accent-600/30 transition hover:bg-accent-400"
+                className="inline-flex items-center gap-2 rounded-[10px] bg-gradient-to-b from-[#45d97a] to-[#22b85a] px-5 py-3 text-sm font-semibold text-[#03140a] shadow-[0_8px_24px_rgba(52,204,107,0.3)] transition-shadow hover:shadow-[0_8px_30px_rgba(52,204,107,0.5)]"
               >
                 Demander une démonstration
                 <ArrowRight className="h-4 w-4" />
               </a>
               <a
                 href="#tarifs"
-                className="inline-flex items-center gap-2 rounded-lg border border-white/20 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+                className="inline-flex items-center gap-2 rounded-[10px] border border-white/20 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
               >
                 Voir les tarifs
               </a>
@@ -162,7 +176,7 @@ export default function LandingPage() {
             <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm text-gray-300">
               {['Premier mois inclus', 'Sans engagement de durée', 'Paiement Mobile Money'].map((item) => (
                 <li key={item} className="flex items-center gap-1.5">
-                  <Check className="h-4 w-4 text-emerald-400" />
+                  <Check className="h-4 w-4 text-[#34cc6b]" />
                   {item}
                 </li>
               ))}
@@ -176,15 +190,15 @@ export default function LandingPage() {
                 <div className="flex items-center gap-1.5 border-b border-gray-200 bg-white px-3 py-2">
                   <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
                   <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
-                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#34cc6b]" />
                   <span className="ml-3 text-[11px] font-medium text-gray-400">Pandora Health — Tableau de bord</span>
                 </div>
                 <div className="flex">
-                  <div className="hidden w-32 shrink-0 space-y-1.5 border-r border-gray-200 bg-white p-3 sm:block">
+                  <div className="hidden w-32 shrink-0 space-y-1.5 bg-ink-950 p-3 sm:block">
                     {['Patients', 'Consultations', 'Laboratoire', 'Pharmacie', 'Caisse', 'Comptabilité'].map((item, i) => (
                       <div
                         key={item}
-                        className={`rounded-md px-2 py-1.5 text-[10px] font-medium ${i === 4 ? 'bg-accent-50 text-accent-700' : 'text-gray-500'}`}
+                        className={`rounded-md px-2 py-1.5 text-[10px] font-medium ${i === 4 ? 'border-l-2 border-[#34cc6b] bg-[#34cc6b]/15 text-white' : 'text-[#9fb2a8]'}`}
                       >
                         {item}
                       </div>
@@ -194,7 +208,7 @@ export default function LandingPage() {
                     <div className="grid grid-cols-3 gap-2">
                       {[
                         { label: 'Patients du jour', value: '48', color: 'text-gray-900' },
-                        { label: 'Encaissé', value: '385 000 F', color: 'text-emerald-600' },
+                        { label: 'Encaissé', value: '385 000 F', color: 'text-gold-700' },
                         { label: 'Lits occupés', value: '72 %', color: 'text-accent-600' }
                       ].map((k) => (
                         <div key={k.label} className="rounded-lg border border-gray-100 bg-white p-2.5">
@@ -207,7 +221,7 @@ export default function LandingPage() {
                       <p className="mb-2 text-[10px] font-semibold text-gray-700">Encaissements de la semaine</p>
                       <div className="flex h-20 items-end gap-1.5">
                         {[40, 65, 52, 80, 60, 92, 74].map((h, i) => (
-                          <div key={i} className="flex-1 rounded-t bg-gradient-to-t from-accent-600 to-accent-400" style={{ height: `${h}%` }} />
+                          <div key={i} className={`flex-1 rounded-t ${i === 5 ? 'bg-gradient-to-t from-gold-500 to-gold-300' : 'bg-gradient-to-t from-accent-600 to-accent-400'}`} style={{ height: `${h}%` }} />
                         ))}
                       </div>
                     </div>
@@ -220,7 +234,7 @@ export default function LandingPage() {
                         <div key={label} className="flex items-center justify-between text-[10px]">
                           <span className="text-gray-600">{label}</span>
                           <span
-                            className={`rounded-full px-1.5 py-0.5 font-semibold ${status === 'Payé' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}
+                            className={`rounded-full px-1.5 py-0.5 font-semibold ${status === 'Payé' ? 'bg-teal-50 text-teal-700' : 'bg-amber-50 text-amber-700'}`}
                           >
                             {status}
                           </span>
@@ -231,8 +245,8 @@ export default function LandingPage() {
                 </div>
               </div>
             </div>
-            <div className="absolute -bottom-5 -left-5 hidden items-center gap-2 rounded-xl border border-white/10 bg-[#16132a] px-4 py-3 text-sm shadow-xl sm:flex">
-              <CloudOff className="h-4 w-4 text-emerald-400" />
+            <div className="absolute -bottom-5 -left-5 hidden items-center gap-2 rounded-xl border border-white/10 bg-ink-900 px-4 py-3 text-sm shadow-xl sm:flex">
+              <CloudOff className="h-4 w-4 text-[#34cc6b]" />
               <span className="text-gray-200">Hors connexion : le travail continue</span>
             </div>
           </div>
@@ -272,7 +286,7 @@ export default function LandingPage() {
                   <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-accent-500 to-accent-700 text-white">
                     <Icon className="h-5 w-5" />
                   </div>
-                  {soon && <span className="rounded-full bg-pink-50 px-2.5 py-0.5 text-xs font-semibold text-pink-700">Bientôt</span>}
+                  {soon && <span className="rounded-full bg-gold-100 px-2.5 py-0.5 text-xs font-semibold text-gold-700">Bientôt</span>}
                 </div>
                 <h3 className="mt-5 text-base font-semibold text-gray-900">{title}</h3>
                 <p className="mt-2 text-sm leading-relaxed text-gray-500">{text}</p>
@@ -300,8 +314,8 @@ export default function LandingPage() {
                 'Version mobile disponible sur demande'
               ].map((item) => (
                 <li key={item} className="flex gap-3">
-                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-50">
-                    <Check className="h-3.5 w-3.5 text-emerald-600" />
+                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent-50">
+                    <Check className="h-3.5 w-3.5 text-accent-600" />
                   </span>
                   {item}
                 </li>
@@ -326,16 +340,16 @@ export default function LandingPage() {
       </section>
 
       {/* Fonctionnement */}
-      <section id="fonctionnement" className="scroll-mt-20 bg-[#0b0a14] text-white">
+      <section id="fonctionnement" className="scroll-mt-20 bg-ink-950 bg-[radial-gradient(700px_320px_at_20%_0%,rgba(13,42,25,0.9),transparent_70%)] text-white">
         <div className="mx-auto max-w-6xl px-5 py-20">
           <div className="max-w-2xl">
-            <p className="text-sm font-semibold text-accent-400">Fonctionnement</p>
+            <p className="text-sm font-semibold text-gold-400">Fonctionnement</p>
             <h2 className="mt-2 text-3xl font-bold tracking-tight">Opérationnel en trois étapes</h2>
           </div>
           <div className="mt-12 grid gap-6 md:grid-cols-3">
             {STEPS.map((step, i) => (
               <div key={step.title} className="rounded-2xl border border-white/10 bg-white/5 p-6">
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent-500 text-sm font-bold">{i + 1}</span>
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-b from-[#45d97a] to-[#22b85a] font-display text-sm font-extrabold text-[#03140a] shadow-[0_0_16px_rgba(52,204,107,0.4)]">{i + 1}</span>
                 <h3 className="mt-5 text-lg font-semibold">{step.title}</h3>
                 <p className="mt-2 text-sm leading-relaxed text-gray-300">{step.text}</p>
               </div>
@@ -364,7 +378,7 @@ export default function LandingPage() {
                   <div className="flex flex-1 flex-col p-5">
                     <div className="flex items-start justify-between gap-2">
                       <h3 className="text-sm font-semibold leading-snug text-gray-900">{offer.name}</h3>
-                      {offer.comingSoon && <span className="shrink-0 rounded-full bg-pink-50 px-2 py-0.5 text-[10px] font-semibold text-pink-700">Bientôt</span>}
+                      {offer.comingSoon && <span className="shrink-0 rounded-full bg-gold-100 px-2 py-0.5 text-[10px] font-semibold text-gold-700">Bientôt</span>}
                     </div>
                     <ul className="mt-4 flex-1 space-y-1.5">
                       {offer.items.map((item) => (
@@ -375,7 +389,7 @@ export default function LandingPage() {
                       ))}
                     </ul>
                     <div className="mt-5 border-t border-gray-100 pt-4">
-                      <p className={`text-2xl font-bold ${style.price}`}>
+                      <p className={`font-display text-2xl font-extrabold tabular-nums ${style.price}`}>
                         {price(offer.price)} <span className="text-sm font-semibold">F</span>
                       </p>
                       <p className="text-xs text-gray-500">{offer.unit === 'forfait' ? 'par mois' : 'par mois et par module'}</p>

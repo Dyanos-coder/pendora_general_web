@@ -50,7 +50,7 @@ export function AccountActions({ accountId, isActive }: { accountId: string; isA
           type="button"
           disabled={pending}
           onClick={() => startTransition(() => setAccountActive(accountId, !isActive))}
-          className={isActive ? 'text-red-600 hover:text-red-700' : 'text-emerald-600 hover:text-emerald-700'}
+          className={isActive ? 'text-red-600 hover:text-red-700' : 'text-teal-600 hover:text-teal-700'}
         >
           {isActive ? 'Désactiver' : 'Réactiver'}
         </button>

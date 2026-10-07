@@ -33,7 +33,7 @@ export function ActivationCode({ hospitalId, code }: { hospitalId: string; code:
             }}
             className={buttonSecondary}
           >
-            {copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+            {copied ? <Check className="h-4 w-4 text-teal-600" /> : <Copy className="h-4 w-4" />}
             {copied ? 'Copié' : 'Copier'}
           </button>
         </div>

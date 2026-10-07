@@ -59,7 +59,7 @@ export default async function HospitalPage({ params }: PageProps<'/hospitals/[id
                   <ul className="space-y-1">
                     {group.modules.map((m) => (
                       <li key={m.id} className={`flex items-center gap-2 text-sm ${enabled.has(m.id) ? 'text-gray-800' : 'text-gray-400'}`}>
-                        {enabled.has(m.id) ? <CheckCircle2 className="h-4 w-4 text-emerald-500" /> : <Circle className="h-4 w-4" />}
+                        {enabled.has(m.id) ? <CheckCircle2 className="h-4 w-4 text-teal-500" /> : <Circle className="h-4 w-4" />}
                         {m.label}
                       </li>
                     ))}

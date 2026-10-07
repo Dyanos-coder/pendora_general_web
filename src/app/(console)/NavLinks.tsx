@@ -16,18 +16,21 @@ const LINKS = [
 export function NavLinks({ isAdmin }: { isAdmin: boolean }) {
   const pathname = usePathname()
   return (
-    <nav className="flex-1 space-y-0.5 px-3 py-4">
+    <nav className="rail-scroll flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
       {LINKS.filter((l) => isAdmin || !l.adminOnly).map(({ href, label, icon: Icon }) => {
         const active = pathname === href || pathname.startsWith(`${href}/`)
         return (
           <Link
             key={href}
             href={href}
-            className={`flex items-center gap-3 rounded-lg border-l-2 py-2 pl-2.5 pr-3 text-sm font-medium transition-colors ${
-              active ? 'border-accent-500 bg-accent-50 text-accent-700' : 'border-transparent text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+            className={`relative flex items-center gap-3 rounded-[10px] px-2.5 py-2 text-[13.5px] transition-colors ${
+              active
+                ? 'bg-gradient-to-r from-[#34cc6b]/[0.16] to-transparent font-semibold text-white'
+                : 'text-[#c3d1c9] hover:bg-white/[0.05] hover:text-white'
             }`}
           >
-            <Icon className="h-4 w-4" />
+            {active && <span className="absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-full bg-[#34cc6b] shadow-[0_0_10px_#34cc6b]" />}
+            <Icon className={`h-[17px] w-[17px] ${active ? 'text-[#34cc6b]' : 'opacity-80'}`} />
             {label}
           </Link>
         )
