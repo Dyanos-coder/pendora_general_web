@@ -105,19 +105,37 @@ model ContactRequest {
 
 // --- Abonnements (Plan-Site-Pandora.md §6) ------------------------------------------------------
 
-// Élément facturable de la grille : un forfait (ex. Gestion financière = Caisse + Comptabilité) ou
-// un module vendu à l'unité (ex. Laboratoire). `modules` = identifiants de modules de l'application.
-model PriceItem {
-  key        String  @id
-  offer      String
-  label      String
-  price      Int
-  modules    String  @db.Text
-  mandatory  Boolean @default(false)
-  comingSoon Boolean @default(false)
-  active     Boolean @default(true)
-  sortOrder  Int     @default(0)
+// Plan de la grille (Plan-Gestion-Des-Plans.md) : carte de la page d'accueil et groupe de l'écran
+// Abonnement de l'application. Nom, ordre, couleur et points forts modifiables dans la console.
+// `highlights` = points forts affichés sur la page d'accueil (tableau JSON de textes).
+model Plan {
+  id         String      @id
+  name       String
+  color      String      @default("emerald")
+  highlights String      @db.Text
+  comingSoon Boolean     @default(false)
+  active     Boolean     @default(true)
+  sortOrder  Int         @default(0)
+  items      PriceItem[]
 
+  @@map("plan")
+}
+
+// Élément facturable d'un plan : un forfait (ex. Gestion financière = Caisse + Comptabilité) ou
+// un module vendu à l'unité (ex. Laboratoire). `modules` = identifiants de modules de l'application.
+// `key` ne change jamais : il figure dans les abonnements signés.
+model PriceItem {
+  key       String  @id
+  planId    String
+  plan      Plan    @relation(fields: [planId], references: [id])
+  label     String
+  price     Int
+  modules   String  @db.Text
+  mandatory Boolean @default(false)
+  active    Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  @@index([planId])
   @@map("price_item")
 }
 

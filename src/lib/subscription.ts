@@ -1,10 +1,10 @@
 import 'server-only'
 import { randomBytes } from 'crypto'
-import type { Hospital, PriceItem } from '@/generated/prisma/client'
+import type { Hospital, Plan, PriceItem } from '@/generated/prisma/client'
 import { prisma } from './db'
 import { decryptSecret, encryptSecret } from './crypto'
 import { accessOf, openConnection } from './hospital-db'
-import { FREE_MODULES, OFFERS } from './offers'
+import { FREE_MODULES, OFFERS, colorFamily, type PlanColor } from './offers'
 import { signText, verifyText } from './signing'
 import {
   normalizePayload,
@@ -28,38 +28,188 @@ export interface HospitalSubscription {
 
 // --- Grille ------------------------------------------------------------------------------------
 
-/** Grille courante ; initialisée depuis offers.ts au premier appel si la table est vide. */
-export async function getPriceItems(): Promise<PriceItem[]> {
-  const existing = await prisma.priceItem.findMany({ orderBy: { sortOrder: 'asc' } })
-  if (existing.length > 0) return existing
-  let order = 0
-  for (const offer of OFFERS) {
-    for (const item of offer.billing) {
-      await prisma.priceItem.upsert({
-        where: { key: item.key },
-        update: {},
-        create: {
-          key: item.key,
-          offer: offer.name,
-          label: item.label,
-          price: offer.price,
-          modules: JSON.stringify(item.modules),
-          mandatory: Boolean(offer.mandatory),
-          comingSoon: Boolean(offer.comingSoon),
-          sortOrder: order++
+export type CatalogPlan = Plan & { items: PriceItem[] }
+
+/** Élément tel que l'utilisent devis, API de l'application et console : nom de son plan, et
+ * disponibilité effective (un plan masqué ou « bientôt » rend ses éléments indisponibles). */
+export type CatalogItem = PriceItem & { offer: string; comingSoon: boolean }
+
+/** Grille d'origine (offers.ts), écrite au premier appel si la base n'a encore aucun plan. */
+async function seedCatalog(): Promise<void> {
+  if ((await prisma.priceItem.count()) > 0) return
+  for (const [planOrder, offer] of OFFERS.entries()) {
+    await prisma.plan.upsert({
+      where: { id: offer.id },
+      update: {},
+      create: {
+        id: offer.id,
+        name: offer.name,
+        color: offer.color,
+        highlights: JSON.stringify(offer.items),
+        comingSoon: Boolean(offer.comingSoon),
+        sortOrder: planOrder,
+        items: {
+          create: offer.billing.map((item, order) => ({
+            key: item.key,
+            label: item.label,
+            price: offer.price,
+            modules: JSON.stringify(item.modules),
+            mandatory: Boolean(offer.mandatory),
+            sortOrder: order
+          }))
         }
-      })
-    }
+      }
+    })
   }
-  return prisma.priceItem.findMany({ orderBy: { sortOrder: 'asc' } })
 }
 
-export function itemModules(item: PriceItem): string[] {
+/** Plans et leurs éléments, dans l'ordre d'affichage (Plan-Gestion-Des-Plans.md). */
+export async function getPlans(): Promise<CatalogPlan[]> {
+  const read = () =>
+    prisma.plan.findMany({
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      include: { items: { orderBy: [{ sortOrder: 'asc' }, { label: 'asc' }] } }
+    })
+  const plans = await read()
+  if (plans.length > 0) return plans
+  await seedCatalog()
+  return read()
+}
+
+/** Grille à plat, dans l'ordre des plans puis des éléments. */
+export async function getPriceItems(): Promise<CatalogItem[]> {
+  const plans = await getPlans()
+  return plans.flatMap((plan) =>
+    plan.items.map((item) => ({ ...item, offer: plan.name, active: item.active && plan.active, comingSoon: plan.comingSoon }))
+  )
+}
+
+export function itemModules(item: Pick<PriceItem, 'modules'>): string[] {
   try {
     return JSON.parse(item.modules) as string[]
   } catch {
     return []
   }
+}
+
+export function planHighlights(plan: Pick<Plan, 'highlights'>): string[] {
+  try {
+    return (JSON.parse(plan.highlights) as unknown[]).filter((h): h is string => typeof h === 'string' && h.trim() !== '')
+  } catch {
+    return []
+  }
+}
+
+// --- Page d'accueil ---------------------------------------------------------------------------
+
+export interface PublicOffer {
+  id: string
+  name: string
+  color: PlanColor
+  highlights: string[]
+  comingSoon: boolean
+  /** Prix affiché : celui du forfait, du module, ou le plus bas (« à partir de »). */
+  price: number
+  priceNote: 'par mois' | 'par mois et par module' | 'à partir de, par mois'
+  fromPrice: boolean
+}
+
+export interface PublicPricing {
+  offers: PublicOffer[]
+  /** Exemple de la page d'accueil, recalculé avec les prix du moment (absent si un élément manque). */
+  example: { labels: string[]; total: number } | null
+}
+
+function toPublicOffer(plan: {
+  id: string
+  name: string
+  color: string
+  comingSoon: boolean
+  highlights: string[]
+  items: { label: string; price: number }[]
+}): PublicOffer {
+  const prices = plan.items.map((i) => i.price)
+  const min = Math.min(...prices)
+  const single = plan.items.length === 1
+  const same = prices.every((p) => p === min)
+  return {
+    id: plan.id,
+    name: plan.name,
+    color: colorFamily(plan.color),
+    highlights: plan.highlights.length > 0 ? plan.highlights : plan.items.map((i) => i.label),
+    comingSoon: plan.comingSoon,
+    price: min,
+    priceNote: single ? 'par mois' : same ? 'par mois et par module' : 'à partir de, par mois',
+    fromPrice: !single && !same
+  }
+}
+
+const EXAMPLE_KEYS = ['soins', 'laboratory', 'pharmacy', 'finance']
+
+/** Cartes Tarifs de la page d'accueil depuis la grille (Plan-Gestion-Des-Plans.md §3.2) ; grille
+ * d'origine (offers.ts) si la base du site est injoignable. */
+export async function getPublicPricing(): Promise<PublicPricing> {
+  try {
+    const plans = await getPlans()
+    const offers = plans
+      .filter((p) => p.active)
+      .map((p) => ({ ...p, highlights: planHighlights(p), items: p.items.filter((i) => i.active) }))
+      .filter((p) => p.items.length > 0)
+      .map(toPublicOffer)
+    const items = plans.filter((p) => p.active && !p.comingSoon).flatMap((p) => p.items.filter((i) => i.active))
+    const chosen = EXAMPLE_KEYS.map((key) => items.find((i) => i.key === key))
+    const example = chosen.every(Boolean)
+      ? { labels: chosen.map((i) => i!.label), total: chosen.reduce((sum, i) => sum + i!.price, 0) }
+      : null
+    return { offers, example }
+  } catch (error) {
+    console.error('[tarifs] grille de la base indisponible, grille d’origine affichée', error)
+    return {
+      offers: OFFERS.map((o) =>
+        toPublicOffer({
+          ...o,
+          comingSoon: Boolean(o.comingSoon),
+          highlights: o.items,
+          items: o.billing.map((b) => ({ label: b.label, price: o.price }))
+        })
+      ),
+      example: { labels: ['Soins & Patients', 'Laboratoire', 'Pharmacie', 'Gestion financière'], total: 50000 }
+    }
+  }
+}
+
+/** Nombre de paiements (payés ou appliqués) qui contiennent cet élément : s'il en a, il a été acheté. */
+export async function itemPurchaseCount(key: string): Promise<number> {
+  return prisma.payment.count({ where: { status: { in: ['PAYE', 'APPLIQUE'] }, items: { contains: JSON.stringify(key) } } })
+}
+
+/** Par élément : établissements dont le dernier paiement appliqué, encore en cours, le contient,
+ * et nombre total de paiements qui l'ont acheté (console Plans & tarifs). */
+export async function itemUsage(): Promise<Record<string, { current: number; purchases: number }>> {
+  const payments = await prisma.payment.findMany({
+    where: { status: { in: ['PAYE', 'APPLIQUE'] } },
+    select: { hospitalId: true, status: true, items: true, newEndDate: true, appliedAt: true, createdAt: true },
+    orderBy: { createdAt: 'asc' }
+  })
+  const usage: Record<string, { current: number; purchases: number }> = {}
+  const keysOf = (items: string): string[] => {
+    try {
+      return JSON.parse(items) as string[]
+    } catch {
+      return []
+    }
+  }
+  const latest = new Map<string, (typeof payments)[number]>()
+  for (const payment of payments) {
+    for (const key of keysOf(payment.items)) (usage[key] ??= { current: 0, purchases: 0 }).purchases++
+    if (payment.status === 'APPLIQUE') latest.set(payment.hospitalId, payment)
+  }
+  const today = ymd(new Date())
+  for (const payment of latest.values()) {
+    if (!payment.newEndDate || payment.newEndDate < today) continue
+    for (const key of keysOf(payment.items)) (usage[key] ??= { current: 0, purchases: 0 }).current++
+  }
+  return usage
 }
 
 // --- Dates (échéance le 28) -----------------------------------------------------------------
@@ -98,7 +248,7 @@ export async function computeQuote(itemKeys: string[], months: number, current: 
   const keys = [...new Set(itemKeys)]
   const items = keys.map((key) => catalog.find((i) => i.key === key && i.active && !i.comingSoon))
   if (items.some((i) => !i)) throw new QuoteError('Un élément choisi est introuvable ou n’est plus proposé.')
-  const chosen = items as PriceItem[]
+  const chosen = items as CatalogItem[]
   for (const mandatory of catalog.filter((i) => i.mandatory && i.active)) {
     if (!keys.includes(mandatory.key)) throw new QuoteError(`« ${mandatory.label} » est obligatoire.`)
   }

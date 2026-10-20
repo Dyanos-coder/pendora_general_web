@@ -1,37 +1,52 @@
 import { requireAccount } from '@/lib/auth'
-import { getPriceItems } from '@/lib/subscription'
-import { FREE_MODULES } from '@/lib/offers'
-import { Card, PageTitle } from '@/components/ui'
-import { PriceItemRow } from './PriceItemRow'
+import { getPlans, itemModules, itemUsage, planHighlights } from '@/lib/subscription'
+import { FREE_MODULES, PLAN_COLORS, type PlanColor } from '@/lib/offers'
+import { PageTitle } from '@/components/ui'
+import { PlansEditor, type EditorPlan } from './PlansEditor'
 
-export const metadata = { title: 'Tarifs — Pandora' }
+export const metadata = { title: 'Plans & tarifs — Pandora' }
+
+const FREE_LABEL: Record<string, string> = {
+  dashboard: 'Tableau de bord',
+  settings: 'Paramètres',
+  quality: 'Qualité',
+  'risk-management': 'Gestion des risques',
+  'audit-compliance': 'Audit & conformité'
+}
 
 export default async function PricingPage() {
   await requireAccount('ADMIN')
-  const items = await getPriceItems()
-  const offers = [...new Set(items.map((i) => i.offer))]
+  const [plans, usage] = await Promise.all([getPlans(), itemUsage()])
+  const editorPlans: EditorPlan[] = plans.map((plan) => ({
+    id: plan.id,
+    name: plan.name,
+    color: (PLAN_COLORS as readonly string[]).includes(plan.color) ? (plan.color as PlanColor) : 'emerald',
+    highlights: planHighlights(plan),
+    comingSoon: plan.comingSoon,
+    active: plan.active,
+    items: plan.items.map((item) => ({
+      key: item.key,
+      label: item.label,
+      price: item.price,
+      modules: itemModules(item),
+      mandatory: item.mandatory,
+      active: item.active,
+      current: usage[item.key]?.current ?? 0,
+      purchases: usage[item.key]?.purchases ?? 0
+    }))
+  }))
 
   return (
     <>
       <PageTitle
-        title="Tarifs"
-        subtitle="Prix mensuels (FCFA) appliqués aux nouveaux paiements. Un élément désactivé n'est plus proposé à l'achat."
+        title="Plans & tarifs"
+        subtitle="Plans affichés sur la page d'accueil et dans l'écran Abonnement de l'application, avec leurs éléments, prix mensuels (FCFA) et modules. Les changements s'appliquent aux prochains paiements ; ce qui est déjà payé reste acquis."
       />
-      <div className="space-y-6">
-        {offers.map((offer) => (
-          <Card key={offer} className="p-0">
-            <h2 className="border-b border-gray-100 px-5 py-3 text-sm font-semibold text-gray-900">{offer}</h2>
-            <div className="divide-y divide-gray-100">
-              {items
-                .filter((i) => i.offer === offer)
-                .map((i) => (
-                  <PriceItemRow key={i.key} item={{ key: i.key, label: i.label, price: i.price, active: i.active, mandatory: i.mandatory, comingSoon: i.comingSoon }} />
-                ))}
-            </div>
-          </Card>
-        ))}
-        <p className="text-xs text-gray-400">Toujours inclus gratuitement : {FREE_MODULES.join(', ')}.</p>
-      </div>
+      <PlansEditor plans={editorPlans} />
+      <p className="mt-6 text-xs text-gray-400">
+        Toujours inclus gratuitement : {FREE_MODULES.map((m) => FREE_LABEL[m] ?? m).join(', ')}. « En cours » : établissements dont le
+        dernier paiement enregistré sur le site, encore valable, contient l’élément (le premier mois offert n’est pas compté).
+      </p>
     </>
   )
 }

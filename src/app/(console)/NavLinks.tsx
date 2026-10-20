@@ -9,7 +9,7 @@ const LINKS = [
   { href: '/hospitals', label: 'Hôpitaux', icon: Building2, adminOnly: false },
   { href: '/leads', label: 'Demandes de contact', icon: Inbox, adminOnly: false },
   { href: '/payments', label: 'Paiements', icon: CreditCard, adminOnly: true },
-  { href: '/pricing', label: 'Tarifs', icon: Tags, adminOnly: true },
+  { href: '/pricing', label: 'Plans & tarifs', icon: Tags, adminOnly: true },
   { href: '/accounts', label: 'Utilisateurs', icon: Users, adminOnly: true }
 ]
 

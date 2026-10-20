@@ -18,7 +18,8 @@ import {
   Users,
   Wallet
 } from 'lucide-react'
-import { OFFERS, type Offer } from '@/lib/offers'
+import type { PlanColor } from '@/lib/offers'
+import { getPublicPricing } from '@/lib/subscription'
 import { ContactForm } from './ContactForm'
 
 export const metadata = {
@@ -80,7 +81,7 @@ const BRAND = { bar: 'bg-gradient-to-r from-accent-500 to-[#34cc6b]', chip: 'bg-
 const GOLD = { bar: 'bg-gradient-to-r from-gold-500 to-gold-300', chip: 'bg-gold-100 text-gold-700', price: 'text-gold-700' }
 const TEAL = { bar: 'bg-teal-500', chip: 'bg-teal-50 text-teal-700', price: 'text-teal-700' }
 const BLUE = { bar: 'bg-blue-500', chip: 'bg-blue-50 text-blue-700', price: 'text-blue-700' }
-const OFFER_STYLE: Record<Offer['color'], { bar: string; chip: string; price: string }> = {
+const OFFER_STYLE: Record<PlanColor, { bar: string; chip: string; price: string }> = {
   emerald: BRAND,
   sky: BLUE,
   orange: GOLD,
@@ -100,7 +101,12 @@ function price(amount: number): string {
   return amount.toLocaleString('fr-FR')
 }
 
-export default function LandingPage() {
+// Tarifs lus dans la grille de la console (Plan-Gestion-Des-Plans.md) : page régénérée à chaque
+// changement de la grille, et au plus tard toutes les 5 minutes.
+export const revalidate = 300
+
+export default async function LandingPage() {
+  const pricing = await getPublicPricing()
   return (
     <div className="bg-white text-gray-900">
       {/* En-tête */}
@@ -370,7 +376,7 @@ export default function LandingPage() {
             </p>
           </div>
           <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {OFFERS.map((offer) => {
+            {pricing.offers.map((offer) => {
               const style = OFFER_STYLE[offer.color]
               return (
                 <div key={offer.id} className="flex flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
@@ -381,7 +387,7 @@ export default function LandingPage() {
                       {offer.comingSoon && <span className="shrink-0 rounded-full bg-gold-100 px-2 py-0.5 text-[10px] font-semibold text-gold-700">Bientôt</span>}
                     </div>
                     <ul className="mt-4 flex-1 space-y-1.5">
-                      {offer.items.map((item) => (
+                      {offer.highlights.map((item) => (
                         <li key={item} className="flex items-center gap-2 text-sm text-gray-600">
                           <Check className="h-3.5 w-3.5 shrink-0 text-gray-400" />
                           {item}
@@ -390,18 +396,21 @@ export default function LandingPage() {
                     </ul>
                     <div className="mt-5 border-t border-gray-100 pt-4">
                       <p className={`font-display text-2xl font-extrabold tabular-nums ${style.price}`}>
+                        {offer.fromPrice && <span className="mr-1 text-sm font-semibold">dès</span>}
                         {price(offer.price)} <span className="text-sm font-semibold">F</span>
                       </p>
-                      <p className="text-xs text-gray-500">{offer.unit === 'forfait' ? 'par mois' : 'par mois et par module'}</p>
+                      <p className="text-xs text-gray-500">{offer.fromPrice ? 'par mois, selon le module' : offer.priceNote}</p>
                     </div>
                   </div>
                 </div>
               )
             })}
           </div>
-          <p className="mt-8 text-center text-sm text-gray-500">
-            Exemple : Soins & Patients + Laboratoire + Pharmacie + Gestion financière = <strong className="text-gray-800">50 000 F / mois</strong>.
-          </p>
+          {pricing.example && (
+            <p className="mt-8 text-center text-sm text-gray-500">
+              Exemple : {pricing.example.labels.join(' + ')} = <strong className="text-gray-800">{price(pricing.example.total)} F / mois</strong>.
+            </p>
+          )}
         </div>
       </section>
 

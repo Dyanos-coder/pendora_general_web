@@ -1,7 +1,35 @@
-// Grille tarifaire (tarif.png, Plan-Site-Pandora.md §6.2) — source unique :
-// - affichage sur la page d'accueil (`items` = libellés commerciaux) ;
-// - valeurs initiales de la table PriceItem (`billing` = éléments facturables et modules de
-//   l'application qu'ils débloquent). Les prix se modifient ensuite dans la console (page Tarifs).
+// Grille tarifaire d'origine (tarif.png, Plan-Site-Pandora.md §6.2) : valeurs initiales des tables
+// Plan et PriceItem (`items` = points forts de la page d'accueil, `billing` = éléments facturables et
+// modules de l'application qu'ils débloquent). Plans, éléments et prix se modifient ensuite dans la
+// console (page Plans & tarifs, Plan-Gestion-Des-Plans.md) ; cette grille sert aussi de secours à la
+// page d'accueil si la base du site est injoignable.
+
+export const PLAN_COLORS = ['emerald', 'sky', 'orange', 'violet', 'teal', 'pink', 'indigo', 'green'] as const
+export type PlanColor = (typeof PLAN_COLORS)[number]
+
+/** La page d'accueil affiche les plans dans 4 familles de couleurs de la marque : ce sont les choix
+ * proposés dans la console (les 8 valeurs d'origine restent acceptées). */
+export const PLAN_COLOR_CHOICES: { value: PlanColor; label: string }[] = [
+  { value: 'emerald', label: 'Vert Pandora' },
+  { value: 'orange', label: 'Or' },
+  { value: 'teal', label: 'Turquoise' },
+  { value: 'sky', label: 'Bleu' }
+]
+
+const COLOR_FAMILY: Record<PlanColor, PlanColor> = {
+  emerald: 'emerald',
+  green: 'emerald',
+  orange: 'orange',
+  pink: 'orange',
+  teal: 'teal',
+  violet: 'teal',
+  sky: 'sky',
+  indigo: 'sky'
+}
+
+export function colorFamily(color: string): PlanColor {
+  return COLOR_FAMILY[color as PlanColor] ?? 'emerald'
+}
 
 export interface Offer {
   id: string
@@ -10,7 +38,7 @@ export interface Offer {
   price: number
   /** « forfait » : un prix pour tout le groupe ; « module » : prix par module choisi. */
   unit: 'forfait' | 'module'
-  color: 'emerald' | 'sky' | 'orange' | 'violet' | 'teal' | 'pink' | 'indigo' | 'green'
+  color: PlanColor
   comingSoon?: boolean
   mandatory?: boolean
   /** Éléments facturables : un seul pour un forfait, un par module sinon. */
@@ -118,3 +146,65 @@ export const OFFERS: Offer[] = [
 
 /** Modules toujours inclus, sans supplément (§9-A) : tableau de bord, paramètres et Gouvernance & qualité. */
 export const FREE_MODULES = ['dashboard', 'settings', 'quality', 'risk-management', 'audit-compliance']
+
+/** Modules de l'application qu'un élément de la grille peut débloquer (mêmes identifiants que
+ * app-core/src/shared/setup-types.ts), regroupés comme dans le menu de l'application. */
+export const SELLABLE_MODULES: { group: string; modules: { id: string; label: string }[] }[] = [
+  {
+    group: 'Soins & patients',
+    modules: [
+      { id: 'patients', label: 'Patients' },
+      { id: 'consultations', label: 'Consultations' },
+      { id: 'appointments', label: 'Rendez-vous' },
+      { id: 'hospitalization', label: 'Hospitalisation' },
+      { id: 'emergencies', label: 'Urgences' }
+    ]
+  },
+  {
+    group: 'Examens & plateau technique',
+    modules: [
+      { id: 'laboratory', label: 'Laboratoire' },
+      { id: 'imaging', label: 'Imagerie médicale' },
+      { id: 'cardiology', label: 'Cardiologie' },
+      { id: 'pathology', label: 'Anatomopathologie' },
+      { id: 'endoscopy', label: 'Endoscopie' },
+      { id: 'operating-room', label: 'Bloc opératoire' }
+    ]
+  },
+  {
+    group: 'Médicaments & stocks',
+    modules: [
+      { id: 'pharmacy', label: 'Pharmacie' },
+      { id: 'stocks', label: 'Stocks & Dépôts' },
+      { id: 'blood-bank', label: 'Banque de sang' }
+    ]
+  },
+  {
+    group: 'Finance',
+    modules: [
+      { id: 'cashier', label: 'Caisse' },
+      { id: 'finance', label: 'Comptabilité' }
+    ]
+  },
+  {
+    group: 'Administration',
+    modules: [
+      { id: 'procurement', label: 'Approvisionnement' },
+      { id: 'hr', label: 'Ressources humaines' },
+      { id: 'documents', label: 'Documents & signature électronique' }
+    ]
+  },
+  {
+    group: 'Intelligence & pilotage',
+    modules: [
+      { id: 'ai-predictions', label: 'IA & Prédictions' },
+      { id: 'analytics', label: 'Rapports & Analyse' },
+      { id: 'automation-studio', label: 'Automation Studio' }
+    ]
+  }
+]
+
+export const SELLABLE_MODULE_IDS = SELLABLE_MODULES.flatMap((g) => g.modules.map((m) => m.id))
+export const MODULE_LABEL: Record<string, string> = Object.fromEntries(
+  SELLABLE_MODULES.flatMap((g) => g.modules.map((m) => [m.id, m.label]))
+)

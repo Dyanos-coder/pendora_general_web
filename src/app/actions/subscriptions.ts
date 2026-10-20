@@ -95,19 +95,3 @@ export async function retryPayment(paymentId: string): Promise<void> {
   await logAudit(admin.id, 'payment.retry', paymentId)
   refresh(payment.hospitalId)
 }
-
-/** Grille tarifaire (page Tarifs) : prix et disponibilité d'un élément. */
-export async function updatePriceItem(_prev: FormState, formData: FormData): Promise<FormState> {
-  const admin = await requireAccount('ADMIN')
-  const key = String(formData.get('key') ?? '')
-  const price = Number(String(formData.get('price') ?? '').replace(/\s/g, ''))
-  if (!Number.isInteger(price) || price < 0) return { error: 'Prix invalide.' }
-  const item = await prisma.priceItem.findUnique({ where: { key } })
-  if (!item) return { error: 'Élément introuvable.' }
-  // Un élément obligatoire (Soins) reste toujours proposé.
-  const active = item.mandatory || formData.get('active') === 'on'
-  await prisma.priceItem.update({ where: { key }, data: { price, active } })
-  await logAudit(admin.id, 'price.update', key, `${price} F${active ? '' : ' (désactivé)'}`)
-  revalidatePath('/pricing')
-  return { success: 'Enregistré.' }
-}
