@@ -139,13 +139,28 @@ model PriceItem {
   @@map("price_item")
 }
 
-// Palier de réduction de l'abonnement (Plan-Reductions-Abonnement.md) : à partir de `minItems`
-// éléments payants choisis, `percent` % de moins sur tout le paiement.
-model DiscountTier {
-  minItems  Int      @id
-  percent   Int
-  updatedAt DateTime @updatedAt
+// Règle de réduction de l'abonnement (Plan-Reductions-Abonnement.md §8) : une portée (`planIds`,
+// liste JSON des sections ; vide = tout l'abonnement) et ses paliers.
+model DiscountRule {
+  id        String         @id
+  planIds   String         @default("[]") @db.VarChar(2000)
+  sortOrder Int            @default(0)
+  updatedAt DateTime       @updatedAt
+  tiers     DiscountTier[]
 
+  @@map("discount_rule")
+}
+
+// Palier d'une règle : à partir de `minItems` éléments payants choisis dans sa portée, `percent` %
+// de moins sur ces éléments.
+model DiscountTier {
+  ruleId    String
+  rule      DiscountRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  minItems  Int
+  percent   Int
+  updatedAt DateTime     @updatedAt
+
+  @@id([ruleId, minItems])
   @@map("discount_tier")
 }
 

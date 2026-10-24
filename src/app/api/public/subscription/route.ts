@@ -1,14 +1,14 @@
 import { authenticateHospital, unauthorized } from '@/lib/hospital-auth'
-import { FREE_MODULES, getDiscountTiers, getPriceItems, itemModules, readHospitalSubscription } from '@/lib/subscription'
+import { FREE_MODULES, getDiscountRules, getPriceItems, globalTiers, itemModules, readHospitalSubscription } from '@/lib/subscription'
 
 /** Grille et abonnement en cours — écran Abonnement de l'application. */
 export async function GET(request: Request) {
   const hospital = await authenticateHospital(request, '')
   if (!hospital) return unauthorized()
-  const [catalog, current, discountTiers] = await Promise.all([
+  const [catalog, current, discountRules] = await Promise.all([
     getPriceItems(),
     readHospitalSubscription(hospital).catch(() => null),
-    getDiscountTiers()
+    getDiscountRules()
   ])
   return Response.json({
     ok: true,
@@ -24,8 +24,9 @@ export async function GET(request: Request) {
         comingSoon: i.comingSoon
       })),
     freeModules: FREE_MODULES,
-    // Paliers de réduction selon le nombre d'éléments (Plan-Reductions-Abonnement.md).
-    discountTiers,
+    // Réductions (Plan-Reductions-Abonnement.md) : règle « Tout l'abonnement », et toutes les règles (§8).
+    discountTiers: globalTiers(discountRules),
+    discountRules,
     current: current?.valid ? current.payload : null
   })
 }

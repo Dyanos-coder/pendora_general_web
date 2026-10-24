@@ -65,7 +65,7 @@ export async function recordManualPayment(_prev: FormState, formData: FormData):
         months: quote.months,
         amount,
         prorataAmount: quote.prorata.amount,
-        discountPercent: quote.discount.percent,
+        discountPercent: quote.discount.effectivePercent,
         discountAmount: quote.discount.amount,
         previousEndDate: quote.previousEndDate,
         newEndDate: quote.newEndDate,

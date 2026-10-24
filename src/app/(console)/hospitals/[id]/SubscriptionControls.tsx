@@ -4,7 +4,7 @@ import { useActionState, useState, useTransition } from 'react'
 import { activateFirstMonth, recordManualPayment, retryPayment } from '@/app/actions/subscriptions'
 import type { FormState } from '@/app/actions/form-state'
 import { FormMessage, buttonPrimary, buttonSecondary, inputClass, labelClass } from '@/components/ui'
-import { applyPercent, tierFor, type DiscountTierRule } from '@/lib/discount-math'
+import { computeDiscount, type DiscountRuleDef } from '@/lib/discount-math'
 
 export function ActivateFirstMonthButton({ hospitalId }: { hospitalId: string }) {
   const [pending, startTransition] = useTransition()
@@ -41,6 +41,7 @@ export function RetryPaymentButton({ paymentId, label }: { paymentId: string; la
 interface CatalogItem {
   key: string
   offer: string
+  planId: string
   label: string
   price: number
   mandatory: boolean
@@ -51,22 +52,21 @@ export function ManualPaymentForm({
   hospitalId,
   catalog,
   currentItems,
-  discountTiers = []
+  discountRules = []
 }: {
   hospitalId: string
   catalog: CatalogItem[]
   currentItems: string[]
-  /** Paliers de réduction (Plan-Reductions-Abonnement.md), appliqués au montant proposé. */
-  discountTiers?: DiscountTierRule[]
+  /** Règles de réduction (Plan-Reductions-Abonnement.md), appliquées au montant proposé. */
+  discountRules?: DiscountRuleDef[]
 }) {
   const [state, action, pending] = useActionState(recordManualPayment, undefined)
   const [open, setOpen] = useState(false)
   const [selected, setSelected] = useState<string[]>(currentItems.length ? currentItems : catalog.filter((i) => i.mandatory).map((i) => i.key))
   const [months, setMonths] = useState(1)
   const chosen = catalog.filter((i) => selected.includes(i.key))
-  const monthly = chosen.reduce((sum, i) => sum + i.price, 0)
-  const tier = tierFor(chosen.filter((i) => i.price > 0).length, discountTiers)
-  const suggested = applyPercent(monthly * months, tier?.percent ?? 0).total
+  const reduced = computeDiscount(chosen, discountRules, months, undefined, (id) => catalog.find((i) => i.planId === id)?.offer ?? id)
+  const suggested = reduced.total
   const offers = [...new Set(catalog.map((i) => i.offer))]
 
   if (!open) {
@@ -119,7 +119,7 @@ export function ManualPaymentForm({
           <input name="amount" defaultValue={suggested} key={suggested} className={inputClass} />
           <p className="mt-1 text-[11px] text-gray-400">
             Tarif : {suggested.toLocaleString('fr-FR')} F (hors prorata)
-            {tier && ` — réduction ${tier.minItems} éléments et plus : −${tier.percent} %`}
+            {reduced.lines.map((l) => ` — ${l.scope} : −${l.percent} %`).join('')}
           </p>
         </div>
         <div>

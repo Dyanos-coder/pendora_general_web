@@ -20,7 +20,6 @@ import {
 } from 'lucide-react'
 import type { PlanColor } from '@/lib/offers'
 import { getPublicPricing } from '@/lib/subscription'
-import { describeTiers } from '@/lib/discount-math'
 import { ContactForm } from './ContactForm'
 
 export const metadata = {
@@ -407,13 +406,13 @@ export default async function LandingPage() {
               )
             })}
           </div>
-          {pricing.discountTiers.length > 0 && (
+          {pricing.discountText && (
             <p className="mt-8 text-center text-sm font-medium text-accent-700">
-              Plus vous prenez de modules, moins vous payez : {describeTiers(pricing.discountTiers)}.
+              Plus vous prenez de modules, moins vous payez — {pricing.discountText}.
             </p>
           )}
           {pricing.example && (
-            <p className={`${pricing.discountTiers.length > 0 ? 'mt-2' : 'mt-8'} text-center text-sm text-gray-500`}>
+            <p className={`${pricing.discountText ? 'mt-2' : 'mt-8'} text-center text-sm text-gray-500`}>
               Exemple : {pricing.example.labels.join(' + ')} ={' '}
               {pricing.example.percent > 0 && (
                 <span className="text-gray-400 line-through">{price(pricing.example.gross)} F</span>

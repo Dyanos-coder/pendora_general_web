@@ -5,10 +5,13 @@ import { createMoneyFusionPayment } from '@/lib/moneyfusion'
 import { QuoteError, computeQuote, readHospitalSubscription } from '@/lib/subscription'
 
 /** Lignes du paiement MoneyFusion : avec une réduction (Plan-Reductions-Abonnement.md), chaque ligne
- * porte son montant réduit et l'arrondi va sur la dernière, pour que la somme égale le total. */
-function discountedLines(lines: [string, number][], percent: number, total: number): Record<string, number>[] {
-  if (percent <= 0) return lines.map(([label, amount]) => ({ [label]: amount }))
-  const reduced = lines.map(([label, amount]) => [`${label} (−${percent} %)`, Math.floor((amount * (100 - percent)) / 100)] as const)
+ * porte son montant réduit (pourcentage de son élément) et l'arrondi va sur la dernière, pour que la
+ * somme égale le total. */
+function discountedLines(lines: [string, number, number][], total: number): Record<string, number>[] {
+  const reduced = lines.map(
+    ([label, amount, percent]) =>
+      [percent > 0 ? `${label} (−${percent} %)` : label, percent > 0 ? Math.floor((amount * (100 - percent)) / 100) : amount] as const
+  )
   const gap = total - reduced.reduce((sum, [, amount]) => sum + amount, 0)
   return reduced.map(([label, amount], index) => ({ [label]: index === reduced.length - 1 ? amount + gap : amount }))
 }
@@ -36,9 +39,13 @@ export async function POST(request: Request) {
 
   const siteUrl = (process.env.SITE_URL ?? '').replace(/\/+$/, '')
   const paymentId = randomUUID()
-  const lines: [string, number][] = quote.items.map((i) => [i.label, i.price * quote.months])
-  if (quote.prorata.amount > 0) lines.push([`Ajout en cours de période (${quote.prorata.days} j)`, quote.prorata.amount])
-  const article = discountedLines(lines, quote.discount.percent, quote.total)
+  const percentOf = quote.discount.percentByKey
+  const lines: [string, number, number][] = quote.items.map((i) => [i.label, i.price * quote.months, percentOf[i.key] ?? 0])
+  if (quote.prorata.amount > 0) {
+    // Prorata réduit au pourcentage moyen de la réduction (l'écart d'arrondi revient à la dernière ligne).
+    lines.push([`Ajout en cours de période (${quote.prorata.days} j)`, quote.prorata.amount, quote.discount.effectivePercent])
+  }
+  const article = discountedLines(lines, quote.total)
 
   try {
     const created = await createMoneyFusionPayment({
@@ -60,7 +67,7 @@ export async function POST(request: Request) {
         months: quote.months,
         amount: quote.total,
         prorataAmount: quote.prorata.amount,
-        discountPercent: quote.discount.percent,
+        discountPercent: quote.discount.effectivePercent,
         discountAmount: quote.discount.amount,
         previousEndDate: quote.previousEndDate,
         newEndDate: quote.newEndDate,

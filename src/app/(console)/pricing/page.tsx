@@ -1,9 +1,9 @@
 import { requireAccount } from '@/lib/auth'
-import { getDiscountTiers, getPlans, itemModules, itemUsage, planHighlights } from '@/lib/subscription'
+import { getDiscountRules, getPlans, itemModules, itemUsage, planHighlights } from '@/lib/subscription'
 import { FREE_MODULES, PLAN_COLORS, type PlanColor } from '@/lib/offers'
 import { PageTitle } from '@/components/ui'
 import { PlansEditor, type EditorPlan } from './PlansEditor'
-import { DiscountTiersEditor } from './DiscountTiersEditor'
+import { DiscountRulesEditor } from './DiscountRulesEditor'
 
 export const metadata = { title: 'Plans & tarifs — Pandora' }
 
@@ -24,7 +24,7 @@ function typicalPrice(prices: number[]): number {
 
 export default async function PricingPage() {
   await requireAccount('ADMIN')
-  const [plans, usage, discountTiers] = await Promise.all([getPlans(), itemUsage(), getDiscountTiers()])
+  const [plans, usage, discountRules] = await Promise.all([getPlans(), itemUsage(), getDiscountRules()])
   const editorPlans: EditorPlan[] = plans.map((plan) => ({
     id: plan.id,
     name: plan.name,
@@ -50,7 +50,11 @@ export default async function PricingPage() {
         title="Plans & tarifs"
         subtitle="Plans affichés sur la page d'accueil et dans l'écran Abonnement de l'application, avec leurs éléments, prix mensuels (FCFA) et modules. Les changements s'appliquent aux prochains paiements ; ce qui est déjà payé reste acquis."
       />
-      <DiscountTiersEditor tiers={discountTiers} unitPrice={typicalPrice(plans.flatMap((p) => p.items.filter((i) => i.active).map((i) => i.price)))} />
+      <DiscountRulesEditor
+        rules={discountRules}
+        plans={plans.map((p) => ({ id: p.id, name: p.name }))}
+        unitPrice={typicalPrice(plans.flatMap((p) => p.items.filter((i) => i.active).map((i) => i.price)))}
+      />
       <PlansEditor plans={editorPlans} />
       <p className="mt-6 text-xs text-gray-400">
         Toujours inclus gratuitement : {FREE_MODULES.map((m) => FREE_LABEL[m] ?? m).join(', ')}. « En cours » : établissements dont le

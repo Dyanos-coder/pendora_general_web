@@ -6,7 +6,7 @@ import { decryptSecret, encryptSecret } from './crypto'
 import { accessOf, openConnection } from './hospital-db'
 import { FREE_MODULES, OFFERS, colorFamily, type PlanColor } from './offers'
 import { signText, verifyText } from './signing'
-import { applyPercent, nextTier, tierFor, type DiscountTierRule } from './discount-math'
+import { computeDiscount, describeRules, type DiscountHint, type DiscountLine, type DiscountRuleDef, type DiscountTierRule } from './discount-math'
 import {
   normalizePayload,
   planSubscription,
@@ -103,10 +103,35 @@ export function planHighlights(plan: Pick<Plan, 'highlights'>): string[] {
 
 // --- Réductions selon le nombre d'éléments (Plan-Reductions-Abonnement.md) ----------------------
 
-/** Paliers réglés dans la console, du plus petit seuil au plus grand. */
-export async function getDiscountTiers(): Promise<DiscountTierRule[]> {
-  const tiers = await prisma.discountTier.findMany({ orderBy: { minItems: 'asc' } })
-  return tiers.map((t) => ({ minItems: t.minItems, percent: t.percent }))
+/** Règles réglées dans la console (§8) : portée et paliers, du plus petit seuil au plus grand. */
+export async function getDiscountRules(): Promise<DiscountRuleDef[]> {
+  const rules = await prisma.discountRule.findMany({
+    orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+    include: { tiers: { orderBy: { minItems: 'asc' } } }
+  })
+  return rules
+    .map((r) => {
+      let planIds: string[] = []
+      try {
+        planIds = (JSON.parse(r.planIds) as unknown[]).filter((id): id is string => typeof id === 'string')
+      } catch {
+        planIds = []
+      }
+      return { id: r.id, planIds, tiers: r.tiers.map((t) => ({ minItems: t.minItems, percent: t.percent })) }
+    })
+    .filter((r) => r.tiers.length > 0)
+}
+
+/** Paliers de la règle « Tout l'abonnement » (écrans qui ne connaissent pas encore les sections). */
+export function globalTiers(rules: DiscountRuleDef[]): DiscountTierRule[] {
+  return rules.find((r) => r.planIds.length === 0)?.tiers ?? []
+}
+
+/** Nom d'une section (plan) pour les libellés de réduction. */
+export async function planNames(): Promise<(id: string) => string> {
+  const plans = await prisma.plan.findMany({ select: { id: true, name: true } })
+  const names = new Map(plans.map((p) => [p.id, p.name]))
+  return (id) => names.get(id) ?? id
 }
 
 /** Éléments qui comptent pour la réduction : les éléments payants (un forfait compte pour 1). */
@@ -132,8 +157,8 @@ export interface PublicPricing {
   offers: PublicOffer[]
   /** Exemple de la page d'accueil, recalculé avec les prix du moment (absent si un élément manque). */
   example: { labels: string[]; total: number; gross: number; percent: number } | null
-  /** Paliers de réduction selon le nombre d'éléments (Plan-Reductions-Abonnement.md). */
-  discountTiers: DiscountTierRule[]
+  /** Réductions (Plan-Reductions-Abonnement.md) : texte prêt à afficher, vide sans réduction. */
+  discountText: string
 }
 
 function toPublicOffer(plan: {
@@ -166,7 +191,8 @@ const EXAMPLE_KEYS = ['soins', 'laboratory', 'pharmacy', 'finance']
  * d'origine (offers.ts) si la base du site est injoignable. */
 export async function getPublicPricing(): Promise<PublicPricing> {
   try {
-    const [plans, discountTiers] = await Promise.all([getPlans(), getDiscountTiers().catch(() => [])])
+    const [plans, rules] = await Promise.all([getPlans(), getDiscountRules().catch(() => [])])
+    const nameOf = (id: string): string => plans.find((p) => p.id === id)?.name ?? id
     const offers = plans
       .filter((p) => p.active)
       .map((p) => ({ ...p, highlights: planHighlights(p), items: p.items.filter((i) => i.active) }))
@@ -174,12 +200,13 @@ export async function getPublicPricing(): Promise<PublicPricing> {
       .map(toPublicOffer)
     const items = plans.filter((p) => p.active && !p.comingSoon).flatMap((p) => p.items.filter((i) => i.active))
     const chosen = EXAMPLE_KEYS.map((key) => items.find((i) => i.key === key))
-    const gross = chosen.every(Boolean) ? chosen.reduce((sum, i) => sum + i!.price, 0) : 0
-    const percent = tierFor(billableCount(chosen.filter(Boolean) as PriceItem[]), discountTiers)?.percent ?? 0
-    const example = chosen.every(Boolean)
-      ? { labels: chosen.map((i) => i!.label), total: applyPercent(gross, percent).total, gross, percent }
+    const reduced = chosen.every(Boolean)
+      ? computeDiscount((chosen as PriceItem[]).map((i) => ({ key: i.key, planId: i.planId, price: i.price })), rules, 1)
       : null
-    return { offers, example, discountTiers }
+    const example = reduced
+      ? { labels: chosen.map((i) => i!.label), total: reduced.total, gross: reduced.gross, percent: reduced.percent }
+      : null
+    return { offers, example, discountText: describeRules(rules, nameOf) }
   } catch (error) {
     console.error('[tarifs] grille de la base indisponible, grille d’origine affichée', error)
     return {
@@ -192,7 +219,7 @@ export async function getPublicPricing(): Promise<PublicPricing> {
         })
       ),
       example: { labels: ['Soins & Patients', 'Laboratoire', 'Pharmacie', 'Gestion financière'], total: 50000, gross: 50000, percent: 0 },
-      discountTiers: []
+      discountText: ''
     }
   }
 }
@@ -252,13 +279,24 @@ export interface Quote {
     itemCount: number
     /** Montant avant réduction (mois + prorata). */
     gross: number
+    /** Pourcentage de la règle appliquée (plusieurs règles : pourcentage effectif sur tout le paiement). */
     percent: number
-    /** Seuil du palier appliqué (0 sans réduction). */
+    /** Pourcentage effectif sur tout le paiement (enregistré sur le paiement). */
+    effectivePercent: number
+    /** Seuil du palier appliqué quand une seule règle s'applique (0 sinon). */
     minItems: number
     amount: number
-    /** Palier suivant et éléments manquants pour l'atteindre. */
+    /** Palier suivant de la règle « Tout l'abonnement » (version 0.6.0 de l'application). */
     next: { minItems: number; percent: number; missing: number } | null
+    /** Paliers de la règle « Tout l'abonnement » (version 0.6.0 de l'application). */
     tiers: DiscountTierRule[]
+    /** Détail par règle (§8) et paliers suivants de chaque règle. */
+    lines: DiscountLine[]
+    hints: DiscountHint[]
+    /** Règles en texte : « Tout l'abonnement : dès 10 éléments −10 % · … ». */
+    rulesText: string
+    /** Pourcentage appliqué à chaque élément choisi. */
+    percentByKey: Record<string, number>
   }
   total: number
   previousEndDate: string | null
@@ -296,12 +334,20 @@ export async function computeQuote(itemKeys: string[], months: number, current: 
   const monthly = chosen.reduce((sum, i) => sum + i.price, 0)
   const labelOf = new Map(catalog.map((i) => [i.key, i.label]))
 
-  // Réduction du palier atteint par la sélection, sur tout le paiement (mois + prorata).
-  const tiers = await getDiscountTiers()
+  // Réductions (§8) : chaque règle compte les éléments payants de sa portée ; la plus forte s'applique
+  // à chaque élément, sur ses mois et sa part du prorata.
+  const [rules, nameOf] = await Promise.all([getDiscountRules(), planNames()])
   const itemCount = billableCount(chosen)
-  const tier = tierFor(itemCount, tiers)
-  const gross = monthly * months + plan.prorataAmount
-  const reduced = applyPercent(gross, tier?.percent ?? 0)
+  const reduced = computeDiscount(
+    chosen.map((i) => ({ key: i.key, planId: i.planId, price: i.price })),
+    rules,
+    months,
+    { amount: plan.prorataAmount, keys: plan.addedItems },
+    nameOf
+  )
+  const tiers = globalTiers(rules)
+  const single = reduced.lines.length === 1 ? reduced.lines[0] : null
+  const globalNext = reduced.hints.find((h) => h.scope === 'Tout l’abonnement')
 
   return {
     items: chosen.map((i) => ({ key: i.key, label: i.label, price: i.price })),
@@ -310,13 +356,18 @@ export async function computeQuote(itemKeys: string[], months: number, current: 
     monthly,
     prorata: { amount: plan.prorataAmount, days: plan.prorataDays, items: plan.addedItems.map((k) => labelOf.get(k) ?? k) },
     discount: {
-      itemCount,
-      gross,
-      percent: tier?.percent ?? 0,
-      minItems: tier?.minItems ?? 0,
+      itemCount: single?.itemCount ?? itemCount,
+      gross: reduced.gross,
+      percent: single ? single.percent : reduced.percent,
+      effectivePercent: reduced.percent,
+      minItems: single?.minItems ?? 0,
       amount: reduced.amount,
-      next: nextTier(itemCount, tiers),
-      tiers
+      next: globalNext ? { minItems: itemCount + globalNext.missing, percent: globalNext.percent, missing: globalNext.missing } : null,
+      tiers,
+      lines: reduced.lines,
+      hints: reduced.hints,
+      rulesText: describeRules(rules, nameOf),
+      percentByKey: reduced.percentByKey
     },
     total: reduced.total,
     previousEndDate: plan.previousEndDate,

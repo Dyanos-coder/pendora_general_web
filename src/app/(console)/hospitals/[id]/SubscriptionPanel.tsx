@@ -1,7 +1,7 @@
 import type { Hospital } from '@/generated/prisma/client'
 import { prisma } from '@/lib/db'
 import type { HospitalOverview } from '@/lib/hospital-db'
-import { getDiscountTiers, getPriceItems } from '@/lib/subscription'
+import { getDiscountRules, getPriceItems } from '@/lib/subscription'
 import { PAYMENT_STATUS, formatYmd, subscriptionStatus } from '@/lib/subscription-status'
 import { Badge, Card, formatDate, formatFcfa } from '@/components/ui'
 import { ActivateFirstMonthButton, ManualPaymentForm, RetryPaymentButton } from './SubscriptionControls'
@@ -11,7 +11,7 @@ import { ActivateFirstMonthButton, ManualPaymentForm, RetryPaymentButton } from 
 export async function SubscriptionPanel({ hospital, overview, isAdmin }: { hospital: Hospital; overview: HospitalOverview; isAdmin: boolean }) {
   const sub = overview.subscription
   const status = subscriptionStatus(sub)
-  const [catalog, discountTiers] = await Promise.all([getPriceItems(), getDiscountTiers()])
+  const [catalog, discountRules] = await Promise.all([getPriceItems(), getDiscountRules()])
   const labelOf = new Map(catalog.map((i) => [i.key, i.label]))
   const payments = isAdmin ? await prisma.payment.findMany({ where: { hospitalId: hospital.id }, orderBy: { createdAt: 'desc' }, take: 20 }) : []
 
@@ -58,9 +58,11 @@ export async function SubscriptionPanel({ hospital, overview, isAdmin }: { hospi
             <ManualPaymentForm
               key={sub ? 'subscribed' : 'none'}
               hospitalId={hospital.id}
-              catalog={catalog.filter((i) => i.active && !i.comingSoon).map((i) => ({ key: i.key, offer: i.offer, label: i.label, price: i.price, mandatory: i.mandatory }))}
+              catalog={catalog
+                .filter((i) => i.active && !i.comingSoon)
+                .map((i) => ({ key: i.key, offer: i.offer, planId: i.planId, label: i.label, price: i.price, mandatory: i.mandatory }))}
               currentItems={sub?.periods.at(-1)?.items ?? []}
-              discountTiers={discountTiers}
+              discountRules={discountRules}
             />
           </div>
           {payments.length > 0 && (
