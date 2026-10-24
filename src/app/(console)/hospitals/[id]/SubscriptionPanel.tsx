@@ -1,7 +1,7 @@
 import type { Hospital } from '@/generated/prisma/client'
 import { prisma } from '@/lib/db'
 import type { HospitalOverview } from '@/lib/hospital-db'
-import { getPriceItems } from '@/lib/subscription'
+import { getDiscountTiers, getPriceItems } from '@/lib/subscription'
 import { PAYMENT_STATUS, formatYmd, subscriptionStatus } from '@/lib/subscription-status'
 import { Badge, Card, formatDate, formatFcfa } from '@/components/ui'
 import { ActivateFirstMonthButton, ManualPaymentForm, RetryPaymentButton } from './SubscriptionControls'
@@ -11,7 +11,7 @@ import { ActivateFirstMonthButton, ManualPaymentForm, RetryPaymentButton } from 
 export async function SubscriptionPanel({ hospital, overview, isAdmin }: { hospital: Hospital; overview: HospitalOverview; isAdmin: boolean }) {
   const sub = overview.subscription
   const status = subscriptionStatus(sub)
-  const catalog = await getPriceItems()
+  const [catalog, discountTiers] = await Promise.all([getPriceItems(), getDiscountTiers()])
   const labelOf = new Map(catalog.map((i) => [i.key, i.label]))
   const payments = isAdmin ? await prisma.payment.findMany({ where: { hospitalId: hospital.id }, orderBy: { createdAt: 'desc' }, take: 20 }) : []
 
@@ -60,6 +60,7 @@ export async function SubscriptionPanel({ hospital, overview, isAdmin }: { hospi
               hospitalId={hospital.id}
               catalog={catalog.filter((i) => i.active && !i.comingSoon).map((i) => ({ key: i.key, offer: i.offer, label: i.label, price: i.price, mandatory: i.mandatory }))}
               currentItems={sub?.periods.at(-1)?.items ?? []}
+              discountTiers={discountTiers}
             />
           </div>
           {payments.length > 0 && (
@@ -72,7 +73,10 @@ export async function SubscriptionPanel({ hospital, overview, isAdmin }: { hospi
                       <td className="py-2 text-gray-500">{formatDate(p.createdAt, true)}</td>
                       <td className="py-2 text-gray-700">{p.method === 'MANUEL' ? 'Manuel' : 'MoneyFusion'}</td>
                       <td className="py-2 text-gray-700">{p.months === 0 ? 'Ajout' : `${p.months} mois`}</td>
-                      <td className="py-2 font-medium text-gray-900">{formatFcfa(p.amount)}</td>
+                      <td className="py-2 font-medium text-gray-900">
+                        {formatFcfa(p.amount)}
+                        {p.discountPercent > 0 && <p className="text-[11px] font-normal text-accent-700">−{p.discountPercent} % ({formatFcfa(p.discountAmount)})</p>}
+                      </td>
                       <td className="py-2">
                         <Badge tone={PAYMENT_STATUS[p.status].tone}>{PAYMENT_STATUS[p.status].label}</Badge>
                         {p.lastError && <p className="mt-0.5 text-[11px] text-red-600">{p.lastError}</p>}

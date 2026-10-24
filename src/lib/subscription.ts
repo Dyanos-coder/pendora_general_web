@@ -6,6 +6,7 @@ import { decryptSecret, encryptSecret } from './crypto'
 import { accessOf, openConnection } from './hospital-db'
 import { FREE_MODULES, OFFERS, colorFamily, type PlanColor } from './offers'
 import { signText, verifyText } from './signing'
+import { applyPercent, nextTier, tierFor, type DiscountTierRule } from './discount-math'
 import {
   normalizePayload,
   planSubscription,
@@ -100,6 +101,19 @@ export function planHighlights(plan: Pick<Plan, 'highlights'>): string[] {
   }
 }
 
+// --- Réductions selon le nombre d'éléments (Plan-Reductions-Abonnement.md) ----------------------
+
+/** Paliers réglés dans la console, du plus petit seuil au plus grand. */
+export async function getDiscountTiers(): Promise<DiscountTierRule[]> {
+  const tiers = await prisma.discountTier.findMany({ orderBy: { minItems: 'asc' } })
+  return tiers.map((t) => ({ minItems: t.minItems, percent: t.percent }))
+}
+
+/** Éléments qui comptent pour la réduction : les éléments payants (un forfait compte pour 1). */
+export function billableCount(items: { price: number }[]): number {
+  return items.filter((i) => i.price > 0).length
+}
+
 // --- Page d'accueil ---------------------------------------------------------------------------
 
 export interface PublicOffer {
@@ -117,7 +131,9 @@ export interface PublicOffer {
 export interface PublicPricing {
   offers: PublicOffer[]
   /** Exemple de la page d'accueil, recalculé avec les prix du moment (absent si un élément manque). */
-  example: { labels: string[]; total: number } | null
+  example: { labels: string[]; total: number; gross: number; percent: number } | null
+  /** Paliers de réduction selon le nombre d'éléments (Plan-Reductions-Abonnement.md). */
+  discountTiers: DiscountTierRule[]
 }
 
 function toPublicOffer(plan: {
@@ -150,7 +166,7 @@ const EXAMPLE_KEYS = ['soins', 'laboratory', 'pharmacy', 'finance']
  * d'origine (offers.ts) si la base du site est injoignable. */
 export async function getPublicPricing(): Promise<PublicPricing> {
   try {
-    const plans = await getPlans()
+    const [plans, discountTiers] = await Promise.all([getPlans(), getDiscountTiers().catch(() => [])])
     const offers = plans
       .filter((p) => p.active)
       .map((p) => ({ ...p, highlights: planHighlights(p), items: p.items.filter((i) => i.active) }))
@@ -158,10 +174,12 @@ export async function getPublicPricing(): Promise<PublicPricing> {
       .map(toPublicOffer)
     const items = plans.filter((p) => p.active && !p.comingSoon).flatMap((p) => p.items.filter((i) => i.active))
     const chosen = EXAMPLE_KEYS.map((key) => items.find((i) => i.key === key))
+    const gross = chosen.every(Boolean) ? chosen.reduce((sum, i) => sum + i!.price, 0) : 0
+    const percent = tierFor(billableCount(chosen.filter(Boolean) as PriceItem[]), discountTiers)?.percent ?? 0
     const example = chosen.every(Boolean)
-      ? { labels: chosen.map((i) => i!.label), total: chosen.reduce((sum, i) => sum + i!.price, 0) }
+      ? { labels: chosen.map((i) => i!.label), total: applyPercent(gross, percent).total, gross, percent }
       : null
-    return { offers, example }
+    return { offers, example, discountTiers }
   } catch (error) {
     console.error('[tarifs] grille de la base indisponible, grille d’origine affichée', error)
     return {
@@ -173,7 +191,8 @@ export async function getPublicPricing(): Promise<PublicPricing> {
           items: o.billing.map((b) => ({ label: b.label, price: o.price }))
         })
       ),
-      example: { labels: ['Soins & Patients', 'Laboratoire', 'Pharmacie', 'Gestion financière'], total: 50000 }
+      example: { labels: ['Soins & Patients', 'Laboratoire', 'Pharmacie', 'Gestion financière'], total: 50000, gross: 50000, percent: 0 },
+      discountTiers: []
     }
   }
 }
@@ -227,6 +246,20 @@ export interface Quote {
   months: number
   monthly: number
   prorata: { amount: number; days: number; items: string[] }
+  /** Réduction selon le nombre d'éléments, déjà déduite de `total` (Plan-Reductions-Abonnement.md). */
+  discount: {
+    /** Éléments payants choisis. */
+    itemCount: number
+    /** Montant avant réduction (mois + prorata). */
+    gross: number
+    percent: number
+    /** Seuil du palier appliqué (0 sans réduction). */
+    minItems: number
+    amount: number
+    /** Palier suivant et éléments manquants pour l'atteindre. */
+    next: { minItems: number; percent: number; missing: number } | null
+    tiers: DiscountTierRule[]
+  }
   total: number
   previousEndDate: string | null
   newEndDate: string
@@ -263,13 +296,29 @@ export async function computeQuote(itemKeys: string[], months: number, current: 
   const monthly = chosen.reduce((sum, i) => sum + i.price, 0)
   const labelOf = new Map(catalog.map((i) => [i.key, i.label]))
 
+  // Réduction du palier atteint par la sélection, sur tout le paiement (mois + prorata).
+  const tiers = await getDiscountTiers()
+  const itemCount = billableCount(chosen)
+  const tier = tierFor(itemCount, tiers)
+  const gross = monthly * months + plan.prorataAmount
+  const reduced = applyPercent(gross, tier?.percent ?? 0)
+
   return {
     items: chosen.map((i) => ({ key: i.key, label: i.label, price: i.price })),
     modules,
     months,
     monthly,
     prorata: { amount: plan.prorataAmount, days: plan.prorataDays, items: plan.addedItems.map((k) => labelOf.get(k) ?? k) },
-    total: monthly * months + plan.prorataAmount,
+    discount: {
+      itemCount,
+      gross,
+      percent: tier?.percent ?? 0,
+      minItems: tier?.minItems ?? 0,
+      amount: reduced.amount,
+      next: nextTier(itemCount, tiers),
+      tiers
+    },
+    total: reduced.total,
     previousEndDate: plan.previousEndDate,
     newEndDate: plan.newEndDate,
     periods: plan.periods

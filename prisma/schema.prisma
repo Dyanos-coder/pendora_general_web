@@ -139,6 +139,16 @@ model PriceItem {
   @@map("price_item")
 }
 
+// Palier de réduction de l'abonnement (Plan-Reductions-Abonnement.md) : à partir de `minItems`
+// éléments payants choisis, `percent` % de moins sur tout le paiement.
+model DiscountTier {
+  minItems  Int      @id
+  percent   Int
+  updatedAt DateTime @updatedAt
+
+  @@map("discount_tier")
+}
+
 enum PaymentMethod {
   MONEYFUSION
   MANUEL
@@ -165,6 +175,9 @@ model Payment {
   months            Int
   amount            Int
   prorataAmount     Int           @default(0)
+  // Réduction selon le nombre d'éléments (Plan-Reductions-Abonnement.md), déjà déduite de `amount`.
+  discountPercent   Int           @default(0)
+  discountAmount    Int           @default(0)
   previousEndDate   String?
   newEndDate        String?
   moneyfusionToken  String?       @unique

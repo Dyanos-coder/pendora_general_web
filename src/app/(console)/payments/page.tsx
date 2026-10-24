@@ -80,7 +80,10 @@ export default async function PaymentsPage({ searchParams }: PageProps<'/payment
                     {p.note && <p className="text-xs text-gray-400">{p.note}</p>}
                   </td>
                   <td className="px-5 py-3 text-gray-600">{p.months === 0 ? 'Ajout de modules' : `${p.months} mois`}</td>
-                  <td className="px-5 py-3 font-medium text-gray-900">{formatFcfa(p.amount)}</td>
+                  <td className="px-5 py-3 font-medium text-gray-900">
+                    {formatFcfa(p.amount)}
+                    {p.discountPercent > 0 && <p className="text-xs font-normal text-accent-700">−{p.discountPercent} % ({formatFcfa(p.discountAmount)})</p>}
+                  </td>
                   <td className="px-5 py-3 text-gray-600">{formatYmd(p.newEndDate)}</td>
                   <td className="px-5 py-3">
                     <Badge tone={PAYMENT_STATUS[p.status].tone}>{PAYMENT_STATUS[p.status].label}</Badge>

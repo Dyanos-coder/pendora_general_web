@@ -4,6 +4,7 @@ import { useActionState, useState, useTransition } from 'react'
 import { activateFirstMonth, recordManualPayment, retryPayment } from '@/app/actions/subscriptions'
 import type { FormState } from '@/app/actions/form-state'
 import { FormMessage, buttonPrimary, buttonSecondary, inputClass, labelClass } from '@/components/ui'
+import { applyPercent, tierFor, type DiscountTierRule } from '@/lib/discount-math'
 
 export function ActivateFirstMonthButton({ hospitalId }: { hospitalId: string }) {
   const [pending, startTransition] = useTransition()
@@ -46,12 +47,26 @@ interface CatalogItem {
 }
 
 /** Paiement reçu hors MoneyFusion (virement, espèces…) : modules, durée, montant reçu. */
-export function ManualPaymentForm({ hospitalId, catalog, currentItems }: { hospitalId: string; catalog: CatalogItem[]; currentItems: string[] }) {
+export function ManualPaymentForm({
+  hospitalId,
+  catalog,
+  currentItems,
+  discountTiers = []
+}: {
+  hospitalId: string
+  catalog: CatalogItem[]
+  currentItems: string[]
+  /** Paliers de réduction (Plan-Reductions-Abonnement.md), appliqués au montant proposé. */
+  discountTiers?: DiscountTierRule[]
+}) {
   const [state, action, pending] = useActionState(recordManualPayment, undefined)
   const [open, setOpen] = useState(false)
   const [selected, setSelected] = useState<string[]>(currentItems.length ? currentItems : catalog.filter((i) => i.mandatory).map((i) => i.key))
   const [months, setMonths] = useState(1)
-  const monthly = catalog.filter((i) => selected.includes(i.key)).reduce((sum, i) => sum + i.price, 0)
+  const chosen = catalog.filter((i) => selected.includes(i.key))
+  const monthly = chosen.reduce((sum, i) => sum + i.price, 0)
+  const tier = tierFor(chosen.filter((i) => i.price > 0).length, discountTiers)
+  const suggested = applyPercent(monthly * months, tier?.percent ?? 0).total
   const offers = [...new Set(catalog.map((i) => i.offer))]
 
   if (!open) {
@@ -101,8 +116,11 @@ export function ManualPaymentForm({ hospitalId, catalog, currentItems }: { hospi
         </div>
         <div>
           <label className={labelClass}>Montant reçu (F)</label>
-          <input name="amount" defaultValue={monthly * months} key={monthly * months} className={inputClass} />
-          <p className="mt-1 text-[11px] text-gray-400">Tarif : {(monthly * months).toLocaleString('fr-FR')} F (hors prorata)</p>
+          <input name="amount" defaultValue={suggested} key={suggested} className={inputClass} />
+          <p className="mt-1 text-[11px] text-gray-400">
+            Tarif : {suggested.toLocaleString('fr-FR')} F (hors prorata)
+            {tier && ` — réduction ${tier.minItems} éléments et plus : −${tier.percent} %`}
+          </p>
         </div>
         <div>
           <label className={labelClass}>Référence / mode de paiement</label>
