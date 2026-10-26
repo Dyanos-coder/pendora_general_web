@@ -226,7 +226,16 @@ export async function getPublicPricing(): Promise<PublicPricing> {
 
 /** Nombre de paiements (payés ou appliqués) qui contiennent cet élément : s'il en a, il a été acheté. */
 export async function itemPurchaseCount(key: string): Promise<number> {
-  return prisma.payment.count({ where: { status: { in: ['PAYE', 'APPLIQUE'] }, items: { contains: JSON.stringify(key) } } })
+  // Lecture des listes d'éléments plutôt qu'un LIKE en base : certains hébergeurs refusent le LIKE de
+  // Prisma sur cette colonne (« Illegal mix of collations », erreur 1267).
+  const payments = await prisma.payment.findMany({ where: { status: { in: ['PAYE', 'APPLIQUE'] } }, select: { items: true } })
+  return payments.filter((p) => {
+    try {
+      return (JSON.parse(p.items) as unknown[]).includes(key)
+    } catch {
+      return false
+    }
+  }).length
 }
 
 /** Par élément : établissements dont le dernier paiement appliqué, encore en cours, le contient,
