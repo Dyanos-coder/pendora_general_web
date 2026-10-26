@@ -139,6 +139,18 @@ model PriceItem {
   @@map("price_item")
 }
 
+// Pages (modules) déjà présentes au moins une fois dans l'abonnement d'un établissement (premier mois
+// offert compris), enregistrées à chaque écriture d'abonnement. Un élément de la grille dont une page
+// figure ici ne peut plus être supprimé (Plan-Gestion-Des-Plans.md §8) : il se désactive ou se déplace.
+model SubscribedModule {
+  hospitalId String
+  module     String
+  firstAt    DateTime @default(now())
+
+  @@id([hospitalId, module])
+  @@map("subscribed_module")
+}
+
 // Règle de réduction de l'abonnement (Plan-Reductions-Abonnement.md §8) : une portée (`planIds`,
 // liste JSON des sections ; vide = tout l'abonnement) et ses paliers.
 model DiscountRule {

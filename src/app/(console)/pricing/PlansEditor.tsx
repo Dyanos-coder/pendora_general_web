@@ -4,6 +4,7 @@ import { useActionState, useEffect, useState, useTransition } from 'react'
 import { ArrowDown, ArrowUp, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { deleteItem, deletePlan, moveItem, moveItemToPlan, movePlan, saveItem, savePlan } from '@/app/actions/plans'
 import type { FormState } from '@/app/actions/form-state'
+import { useConfirm } from '@/components/ConfirmDialog'
 import { PLAN_COLOR_CHOICES, SELLABLE_MODULES, MODULE_LABEL, colorFamily, type PlanColor } from '@/lib/offers'
 import { Badge, Card, FormMessage, buttonPrimary, buttonSecondary, formatFcfa, inputClass, labelClass } from '@/components/ui'
 
@@ -21,6 +22,8 @@ export interface EditorItem {
   current: number
   /** Paiements qui l'ont acheté : s'il y en a, l'élément ne peut plus être supprimé. */
   purchases: number
+  /** Une de ses pages a déjà été dans un abonnement (premier mois offert compris) : non supprimable. */
+  subscribed: boolean
 }
 
 export interface EditorPlan {
@@ -88,6 +91,7 @@ function PlanCard({ plan, first, last, plans }: { plan: EditorPlan; first: boole
   const [adding, setAdding] = useState(false)
   const [pending, startTransition] = useTransition()
   const [message, setMessage] = useState<FormState>(undefined)
+  const [confirmDialog, confirm] = useConfirm()
   const unit = plan.items.length === 1 ? 'forfait' : plan.items.length > 1 ? 'à la carte' : 'vide'
 
   return (
@@ -135,9 +139,14 @@ function PlanCard({ plan, first, last, plans }: { plan: EditorPlan; first: boole
               title="Supprimer le plan"
               aria-label="Supprimer le plan"
               disabled={pending}
-              onClick={() => {
-                if (window.confirm(`Supprimer le plan « ${plan.name} » ?`))
-                  startTransition(async () => setMessage(await safeCall(() => deletePlan(plan.id))))
+              onClick={async () => {
+                const ok = await confirm({
+                  title: 'Supprimer le plan',
+                  message: <>Le plan « {plan.name} » sera supprimé. Il est vide : aucun élément ni abonnement n’est touché.</>,
+                  confirmLabel: 'Supprimer',
+                  danger: true
+                })
+                if (ok) startTransition(async () => setMessage(await safeCall(() => deletePlan(plan.id))))
               }}
               className={`${iconButton} hover:bg-red-50 hover:text-red-600`}
             >
@@ -185,6 +194,7 @@ function PlanCard({ plan, first, last, plans }: { plan: EditorPlan; first: boole
           </button>
         )}
       </div>
+      {confirmDialog}
     </Card>
   )
 }
@@ -279,6 +289,7 @@ function ItemRow({
   const [editing, setEditing] = useState(false)
   const [pending, startTransition] = useTransition()
   const [message, setMessage] = useState<FormState>(undefined)
+  const [confirmDialog, confirm] = useConfirm()
 
   if (editing) {
     return (
@@ -305,6 +316,9 @@ function ItemRow({
             <p className="mt-0.5 text-xs text-gray-500">
               {item.current} établissement{item.current > 1 ? 's' : ''} en cours · {item.purchases} achat{item.purchases > 1 ? 's' : ''}
             </p>
+          )}
+          {item.subscribed && item.purchases === 0 && (
+            <p className="mt-0.5 text-xs text-gray-500">Déjà dans un abonnement : désactivez-le ou déplacez-le, il ne peut plus être supprimé.</p>
           )}
         </div>
         <p className="whitespace-nowrap text-sm font-semibold tabular-nums text-gray-900">
@@ -334,15 +348,25 @@ function ItemRow({
           <button type="button" title="Modifier" aria-label="Modifier l’élément" onClick={() => setEditing(true)} className={iconButton}>
             <Pencil className="h-4 w-4" />
           </button>
-          {item.purchases === 0 && (
+          {item.purchases === 0 && !item.subscribed && (
             <button
               type="button"
               title="Supprimer"
               aria-label="Supprimer l’élément"
               disabled={pending}
-              onClick={() => {
-                if (window.confirm(`Supprimer « ${item.label} » de la grille ?`))
-                  startTransition(async () => setMessage(await safeCall(() => deleteItem(item.key))))
+              onClick={async () => {
+                const ok = await confirm({
+                  title: 'Supprimer l’élément',
+                  message: (
+                    <>
+                      « {item.label} » sera retiré de la grille. Avant de supprimer, le site vérifie qu’aucun établissement n’a jamais
+                      eu une de ses pages dans son abonnement ; sinon, la suppression est refusée.
+                    </>
+                  ),
+                  confirmLabel: 'Supprimer',
+                  danger: true
+                })
+                if (ok) startTransition(async () => setMessage(await safeCall(() => deleteItem(item.key))))
               }}
               className={`${iconButton} hover:bg-red-50 hover:text-red-600`}
             >
@@ -373,6 +397,7 @@ function ItemRow({
         )}
       </div>
       {message?.error && <p className="mt-1 text-xs text-red-600">{message.error}</p>}
+      {confirmDialog}
     </div>
   )
 }

@@ -6,7 +6,7 @@ import { prisma } from '@/lib/db'
 import { requireAccount } from '@/lib/auth'
 import { logAudit } from '@/lib/audit'
 import { PLAN_COLORS, SELLABLE_MODULE_IDS, MODULE_LABEL } from '@/lib/offers'
-import { getPlans, itemModules, itemPurchaseCount } from '@/lib/subscription'
+import { getPlans, itemModules, itemPurchaseCount, subscribedModules } from '@/lib/subscription'
 import type { FormState } from './form-state'
 
 // Console › Plans & tarifs (Plan-Gestion-Des-Plans.md) : plans (nom, couleur, points forts, ordre,
@@ -263,13 +263,29 @@ export async function moveItemToPlan(key: string, planId: string): Promise<FormS
   return { success: `Déplacé vers « ${to.name} ».` }
 }
 
-/** Suppression réservée aux éléments jamais achetés (décision B) ; sinon : désactiver. */
+/** Suppression réservée aux éléments dont aucune page n'a jamais été dans un abonnement, premier mois
+ * offert compris (§8) ; sinon : désactiver ou déplacer. */
 export async function deleteItem(key: string): Promise<FormState> {
   const admin = await requireAccount('ADMIN')
   try {
     const item = (await getPlans()).flatMap((p) => p.items).find((i) => i.key === key)
     if (!item) return { error: 'Élément introuvable.' }
-    if ((await itemPurchaseCount(key)) > 0) return { error: 'Cet élément a déjà été acheté : désactivez-le plutôt que de le supprimer.' }
+    if ((await itemPurchaseCount(key)) > 0) return { error: 'Cet élément a déjà été acheté : désactivez-le ou déplacez-le plutôt que de le supprimer.' }
+    const usage = await subscribedModules({ live: true })
+    const used = itemModules(item).filter((module) => usage.hospitalsByModule.has(module))
+    if (used.length > 0) {
+      const hospitals = [...new Set(used.flatMap((module) => [...usage.hospitalsByModule.get(module)!]))]
+      return {
+        error: `Déjà dans l’abonnement de ${hospitals.length > 1 ? `${hospitals.length} établissements` : `« ${hospitals[0]} »`} (pages : ${used
+          .map((module) => MODULE_LABEL[module] ?? module)
+          .join(', ')}) : désactivez-le ou déplacez-le plutôt que de le supprimer.`
+      }
+    }
+    if (usage.unreachable.length > 0) {
+      return {
+        error: `Vérification impossible pour ${usage.unreachable.join(', ')} (base injoignable) : suppression refusée par précaution. Réessayez plus tard.`
+      }
+    }
     const problem = await checkMandatoryRemains({ itemKey: key, item: { mandatory: false, active: false } })
     if (problem) return { error: problem }
     await prisma.priceItem.delete({ where: { key } })

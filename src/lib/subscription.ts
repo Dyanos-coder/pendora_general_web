@@ -455,6 +455,66 @@ export async function writeHospitalSubscription(hospital: Hospital, payload: Sub
   } finally {
     await connection.end().catch(() => undefined)
   }
+  // Historique des pages abonnées (§8) : un échec ici ne doit pas empêcher l'abonnement.
+  await recordSubscribedModules(hospital.id, payload).catch((error) => console.error('[abonnement] historique des pages non enregistré', error))
+}
+
+// --- Pages déjà abonnées (Plan-Gestion-Des-Plans.md §8) ---------------------------------------
+
+/** Enregistre les pages d'un abonnement écrit dans la base d'un hôpital. */
+export async function recordSubscribedModules(hospitalId: string, payload: SubscriptionPayload): Promise<void> {
+  const modules = [...new Set(payload.periods.flatMap((p) => p.modules))]
+  if (modules.length === 0) return
+  await prisma.subscribedModule.createMany({ data: modules.map((page) => ({ hospitalId, module: page })), skipDuplicates: true })
+}
+
+export interface SubscribedModules {
+  /** Page → établissements qui l'ont eue au moins une fois dans leur abonnement. */
+  hospitalsByModule: Map<string, Set<string>>
+  /** Établissements dont la base n'a pas pu être relue (vérification en direct seulement). */
+  unreachable: string[]
+}
+
+/**
+ * Pages déjà présentes au moins une fois dans un abonnement : historique du site, paiements payés,
+ * et — avec `live` — abonnement actuel lu dans la base de chaque hôpital (abonnements écrits avant
+ * l'historique, dont le premier mois offert ; ce qui est lu est ajouté à l'historique).
+ */
+export async function subscribedModules({ live }: { live: boolean }): Promise<SubscribedModules> {
+  const hospitals = await prisma.hospital.findMany()
+  const nameOf = new Map(hospitals.map((h) => [h.id, h.name]))
+  const hospitalsByModule = new Map<string, Set<string>>()
+  const add = (hospitalId: string, modules: string[]): void => {
+    for (const page of modules) {
+      if (!hospitalsByModule.has(page)) hospitalsByModule.set(page, new Set())
+      hospitalsByModule.get(page)!.add(nameOf.get(hospitalId) ?? hospitalId)
+    }
+  }
+  for (const row of await prisma.subscribedModule.findMany()) add(row.hospitalId, [row.module])
+  const payments = await prisma.payment.findMany({ where: { status: { in: ['PAYE', 'APPLIQUE'] } }, select: { hospitalId: true, modules: true } })
+  for (const payment of payments) {
+    try {
+      add(payment.hospitalId, (JSON.parse(payment.modules) as unknown[]).filter((m): m is string => typeof m === 'string'))
+    } catch {
+      // Paiement illisible : ignoré.
+    }
+  }
+  const unreachable: string[] = []
+  if (live) {
+    await Promise.all(
+      hospitals.map(async (hospital) => {
+        try {
+          const current = await readHospitalSubscription(hospital)
+          if (!current) return
+          add(hospital.id, current.payload.periods.flatMap((p) => p.modules))
+          await recordSubscribedModules(hospital.id, current.payload)
+        } catch {
+          unreachable.push(hospital.name)
+        }
+      })
+    )
+  }
+  return { hospitalsByModule, unreachable }
 }
 
 /** Premier mois inclus (§9-B) : tous les modules de la grille, jusqu'au 28 du mois suivant. */

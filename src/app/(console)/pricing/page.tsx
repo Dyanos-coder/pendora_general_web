@@ -1,5 +1,5 @@
 import { requireAccount } from '@/lib/auth'
-import { getDiscountRules, getPlans, itemModules, itemUsage, planHighlights } from '@/lib/subscription'
+import { getDiscountRules, getPlans, itemModules, itemUsage, planHighlights, subscribedModules } from '@/lib/subscription'
 import { FREE_MODULES, PLAN_COLORS, type PlanColor } from '@/lib/offers'
 import { PageTitle } from '@/components/ui'
 import { PlansEditor, type EditorPlan } from './PlansEditor'
@@ -24,7 +24,8 @@ function typicalPrice(prices: number[]): number {
 
 export default async function PricingPage() {
   await requireAccount('ADMIN')
-  const [plans, usage, discountRules] = await Promise.all([getPlans(), itemUsage(), getDiscountRules()])
+  // Pages déjà abonnées : historique et paiements seulement (lecture rapide) ; la suppression revérifie en direct.
+  const [plans, usage, discountRules, subscribed] = await Promise.all([getPlans(), itemUsage(), getDiscountRules(), subscribedModules({ live: false })])
   const editorPlans: EditorPlan[] = plans.map((plan) => ({
     id: plan.id,
     name: plan.name,
@@ -40,7 +41,8 @@ export default async function PricingPage() {
       mandatory: item.mandatory,
       active: item.active,
       current: usage[item.key]?.current ?? 0,
-      purchases: usage[item.key]?.purchases ?? 0
+      purchases: usage[item.key]?.purchases ?? 0,
+      subscribed: itemModules(item).some((module) => subscribed.hospitalsByModule.has(module))
     }))
   }))
 
