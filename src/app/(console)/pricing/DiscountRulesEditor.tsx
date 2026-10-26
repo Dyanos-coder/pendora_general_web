@@ -97,8 +97,12 @@ export function DiscountRulesEditor({
 
   function save(): void {
     startTransition(async () => {
-      const result = await saveDiscountRules(defs)
-      setState(result)
+      try {
+        setState(await saveDiscountRules(defs))
+      } catch {
+        // Page ouverte avant une mise en ligne (action de l'ancienne version) ou serveur injoignable.
+        setState({ error: 'Enregistrement impossible : rechargez la page (le site a peut-être été mis à jour), puis recommencez.' })
+      }
     })
   }
 

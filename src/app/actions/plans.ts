@@ -13,6 +13,16 @@ import type { FormState } from './form-state'
 // « bientôt », masqué) et leurs éléments facturables (nom, prix, modules, obligatoire, actif, ordre,
 // plan). L'identifiant d'un élément ne change jamais : il figure dans les abonnements signés.
 
+/** Erreur inattendue d'une action : écrite dans les journaux du serveur (Vercel › Logs) et affichée
+ * dans la page, au lieu d'une erreur 500 qui fait tomber toute la console. */
+function serverError(action: string, error: unknown): FormState {
+  const message = error instanceof Error ? error.message : String(error)
+  console.error(`[plans] ${action} a échoué`, error)
+  // Dernière ligne non vide du message (Prisma met la cause réelle à la fin).
+  const cause = message.split(/\r?\n/).filter((line) => line.trim()).pop()?.slice(0, 300) ?? 'inconnue'
+  return { error: `Erreur du serveur : ${cause}` }
+}
+
 function refresh(): void {
   revalidatePath('/pricing')
   revalidatePath('/')
@@ -118,11 +128,15 @@ export async function movePlan(id: string, direction: 'up' | 'down'): Promise<vo
 
 export async function deletePlan(id: string): Promise<FormState> {
   const admin = await requireAccount('ADMIN')
-  const plan = (await getPlans()).find((p) => p.id === id)
-  if (!plan) return { error: 'Plan introuvable.' }
-  if (plan.items.length > 0) return { error: 'Retirez ou déplacez d’abord les éléments de ce plan.' }
-  await prisma.plan.delete({ where: { id } })
-  await logAudit(admin.id, 'plan.delete', id, plan.name)
+  try {
+    const plan = (await getPlans()).find((p) => p.id === id)
+    if (!plan) return { error: 'Plan introuvable.' }
+    if (plan.items.length > 0) return { error: 'Retirez ou déplacez d’abord les éléments de ce plan.' }
+    await prisma.plan.delete({ where: { id } })
+    await logAudit(admin.id, 'plan.delete', id, plan.name)
+  } catch (error) {
+    return serverError('deletePlan', error)
+  }
   refresh()
   return { success: 'Plan supprimé.' }
 }
@@ -252,13 +266,17 @@ export async function moveItemToPlan(key: string, planId: string): Promise<FormS
 /** Suppression réservée aux éléments jamais achetés (décision B) ; sinon : désactiver. */
 export async function deleteItem(key: string): Promise<FormState> {
   const admin = await requireAccount('ADMIN')
-  const item = (await getPlans()).flatMap((p) => p.items).find((i) => i.key === key)
-  if (!item) return { error: 'Élément introuvable.' }
-  if ((await itemPurchaseCount(key)) > 0) return { error: 'Cet élément a déjà été acheté : désactivez-le plutôt que de le supprimer.' }
-  const problem = await checkMandatoryRemains({ itemKey: key, item: { mandatory: false, active: false } })
-  if (problem) return { error: problem }
-  await prisma.priceItem.delete({ where: { key } })
-  await logAudit(admin.id, 'price_item.delete', key, item.label)
+  try {
+    const item = (await getPlans()).flatMap((p) => p.items).find((i) => i.key === key)
+    if (!item) return { error: 'Élément introuvable.' }
+    if ((await itemPurchaseCount(key)) > 0) return { error: 'Cet élément a déjà été acheté : désactivez-le plutôt que de le supprimer.' }
+    const problem = await checkMandatoryRemains({ itemKey: key, item: { mandatory: false, active: false } })
+    if (problem) return { error: problem }
+    await prisma.priceItem.delete({ where: { key } })
+    await logAudit(admin.id, 'price_item.delete', key, item.label)
+  } catch (error) {
+    return serverError('deleteItem', error)
+  }
   refresh()
   return { success: 'Élément supprimé.' }
 }

@@ -45,6 +45,16 @@ const DOT: Record<PlanColor, string> = {
   indigo: 'bg-blue-500'
 }
 
+/** Appel d'une action depuis un bouton : un échec (page ouverte avant une mise en ligne, réseau,
+ * serveur) devient un message dans la page au lieu de faire tomber la console. */
+async function safeCall(action: () => Promise<FormState>): Promise<FormState> {
+  try {
+    return await action()
+  } catch {
+    return { error: 'Action impossible : rechargez la page (le site a peut-être été mis à jour), puis recommencez.' }
+  }
+}
+
 const iconButton =
   'inline-grid h-8 w-8 place-items-center rounded-lg text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent'
 
@@ -127,7 +137,7 @@ function PlanCard({ plan, first, last, plans }: { plan: EditorPlan; first: boole
               disabled={pending}
               onClick={() => {
                 if (window.confirm(`Supprimer le plan « ${plan.name} » ?`))
-                  startTransition(async () => setMessage(await deletePlan(plan.id)))
+                  startTransition(async () => setMessage(await safeCall(() => deletePlan(plan.id))))
               }}
               className={`${iconButton} hover:bg-red-50 hover:text-red-600`}
             >
@@ -332,7 +342,7 @@ function ItemRow({
               disabled={pending}
               onClick={() => {
                 if (window.confirm(`Supprimer « ${item.label} » de la grille ?`))
-                  startTransition(async () => setMessage(await deleteItem(item.key)))
+                  startTransition(async () => setMessage(await safeCall(() => deleteItem(item.key))))
               }}
               className={`${iconButton} hover:bg-red-50 hover:text-red-600`}
             >
@@ -347,7 +357,7 @@ function ItemRow({
             disabled={pending}
             onChange={(e) => {
               const target = e.target.value
-              if (target) startTransition(async () => setMessage(await moveItemToPlan(item.key, target)))
+              if (target) startTransition(async () => setMessage(await safeCall(() => moveItemToPlan(item.key, target))))
             }}
             className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-600"
           >
